@@ -114,4 +114,4 @@ export async function verifySessionToken(
   }
 }
 
-export const SESSION_COOKIE = "vena-session";
+export { SESSION_COOKIE } from "@/lib/auth-constants";

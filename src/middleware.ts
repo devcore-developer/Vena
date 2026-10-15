@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth-constants";
 
-// ============================================================
-// CONFIG
-// ============================================================
-
-// Public routes that don't require authentication
+// Public routes — no auth required
 const publicRoutes = [
   "/",
   "/login",
@@ -17,10 +13,8 @@ const publicRoutes = [
   "/doctors",
   "/free",
   "/terms",
-  "/api",
 ];
 
-// Role → dashboard base path
 const roleDashboard: Record<string, string> = {
   SUPER_ADMIN: "/dashboard/admin",
   DOCTOR: "/dashboard/doctor",
@@ -36,15 +30,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Read session cookie
   const token = request.cookies.get(SESSION_COOKIE)?.value;
 
-  // No token → redirect to login
   if (!token) {
     return redirectToLogin(request, pathname);
   }
 
-  // Verify JWT (Edge-compatible — no Prisma)
   let role: string | null = null;
   try {
     const secret = process.env.AUTH_SECRET;
@@ -57,7 +48,6 @@ export async function middleware(request: NextRequest) {
     );
     role = payload.role as string;
   } catch {
-    // Invalid/expired token → redirect to login
     return redirectToLogin(request, pathname);
   }
 
