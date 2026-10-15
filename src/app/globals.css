@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-charcoal antialiased;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    border-color: theme("colors.vena.200");
+  }
+}
+
+@layer components {
+  .brand-logo {
+    @apply flex items-center gap-2;
+  }
+
+  .brand-symbol {
+    @apply flex items-center justify-center bg-vena-500 rounded-lg text-white font-bold;
+  }
+
+  .brand-name {
+    @apply font-bold text-vena-800 tracking-tight;
+  }
+
+  .brand-tagline {
+    @apply text-[9px] font-medium tracking-widest uppercase;
+    color: theme("colors.charcoal.muted");
+  }
+}
