@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
 // ============================================================
-// FINANCE SERVICE — Centralized financial calculations
+// FINANCE SERVICE
 // ============================================================
 
-/** Get the currently active platform fee configuration */
 export async function getActiveFeeConfig() {
   return prisma.platformFeeConfig.findFirst({
     where: { isActive: true },
@@ -12,39 +11,31 @@ export async function getActiveFeeConfig() {
   });
 }
 
-/**
- * Calculate the platform commission for a given gross amount.
- * Uses the active fee config at the time of calculation.
- * Historical transactions are NOT recalculated.
- */
-export async function calculateCommission(
-  grossAmount: { mul: (n: any) => any; sub: (n: any) => any; toNumber: () => number }
-) {
+// قبول number بدل Decimal object
+export async function calculateCommission(grossAmount: number) {
   const config = await getActiveFeeConfig();
-  if (!config) return { commission: 0, doctorNet: grossAmount.toNumber() };
+  if (!config) return { commission: 0, doctorNet: grossAmount };
 
   let commission: number;
 
   if (config.type === "FIXED") {
     commission = config.fixedAmount?.toNumber() || 0;
   } else if (config.type === "PERCENTAGE") {
-    commission = (grossAmount.toNumber() * (config.percentage?.toNumber() || 0)) / 100;
+    commission = (grossAmount * (config.percentage?.toNumber() || 0)) / 100;
   } else {
     commission = 0;
   }
 
-  // Commission cannot exceed gross
-  if (commission > grossAmount.toNumber()) {
-    commission = grossAmount.toNumber();
+  if (commission > grossAmount) {
+    commission = grossAmount;
   }
 
   return {
     commission,
-    doctorNet: grossAmount.toNumber() - commission,
+    doctorNet: grossAmount - commission,
   };
 }
 
-/** Sum of all POSTED financial transactions for a doctor */
 export async function getDoctorEarnings(doctorId: string): Promise<number> {
   const result = await prisma.financialTransaction.aggregate({
     where: { doctorId, status: "POSTED", type: "COURSE_SALE" },
@@ -53,7 +44,6 @@ export async function getDoctorEarnings(doctorId: string): Promise<number> {
   return result._sum.doctorNet?.toNumber() || 0;
 }
 
-/** Sum of all COMPLETED payouts for a doctor */
 export async function getDoctorCompletedPayouts(doctorId: string): Promise<number> {
   const result = await prisma.doctorPayout.aggregate({
     where: { doctorId, status: "COMPLETED" },
@@ -62,7 +52,6 @@ export async function getDoctorCompletedPayouts(doctorId: string): Promise<numbe
   return result._sum.amount?.toNumber() || 0;
 }
 
-/** Sum of REQUESTED + APPROVED + PROCESSING payouts */
 export async function getDoctorPendingPayouts(doctorId: string): Promise<number> {
   const result = await prisma.doctorPayout.aggregate({
     where: {
@@ -74,7 +63,6 @@ export async function getDoctorPendingPayouts(doctorId: string): Promise<number>
   return result._sum.amount?.toNumber() || 0;
 }
 
-/** Available balance = earnings - completed payouts - pending payouts */
 export async function getDoctorAvailableBalance(doctorId: string): Promise<number> {
   const earnings = await getDoctorEarnings(doctorId);
   const completed = await getDoctorCompletedPayouts(doctorId);
@@ -82,7 +70,6 @@ export async function getDoctorAvailableBalance(doctorId: string): Promise<numbe
   return earnings - completed - pending;
 }
 
-/** Get gross sales total for a doctor */
 export async function getDoctorGrossSales(doctorId: string): Promise<number> {
   const result = await prisma.financialTransaction.aggregate({
     where: { doctorId, status: "POSTED", type: "COURSE_SALE" },
@@ -91,7 +78,6 @@ export async function getDoctorGrossSales(doctorId: string): Promise<number> {
   return result._sum.grossAmount?.toNumber() || 0;
 }
 
-/** Get platform commission total for a doctor's sales */
 export async function getDoctorCommission(doctorId: string): Promise<number> {
   const result = await prisma.financialTransaction.aggregate({
     where: { doctorId, status: "POSTED", type: "COURSE_SALE" },
@@ -100,7 +86,6 @@ export async function getDoctorCommission(doctorId: string): Promise<number> {
   return result._sum.platformCommission?.toNumber() || 0;
 }
 
-/** Check if a financial transaction already exists for a payment (idempotency) */
 export async function hasFinancialTransaction(paymentId: string): Promise<boolean> {
   const count = await prisma.financialTransaction.count({
     where: { paymentId },
@@ -108,7 +93,6 @@ export async function hasFinancialTransaction(paymentId: string): Promise<boolea
   return count > 0;
 }
 
-/** Get dashboard summary for a doctor */
 export async function getDoctorFinancialSummary(doctorId: string) {
   const [grossSales, earnings, commission, completedPayouts, pendingPayouts] =
     await Promise.all([
@@ -128,7 +112,127 @@ export async function getDoctorFinancialSummary(doctorId: string) {
     availableBalance: earnings - completedPayouts - pendingPayouts,
   };
 }
-/** Get platform-wide financial summary for Super Admin */
+
+/** Create financial ledger entry — idempotent */
+export async function createLedgerEntry(
+  paymentId: string,
+  courseId?: string,
+  doctorId?: string,
+  studentId?: string
+) {
+  // Idempotent — لو موجود ارجعه
+  const existing = await prisma.financialTransaction.findFirst({
+    where: { paymentId },
+  });
+  if (existing) {
+    return {
+      id: existing.id,
+      paymentId: existing.paymentId,
+      courseId: existing.courseId,
+      doctorId: existing.doctorId,
+      studentId: existing.studentId,
+      grossAmount: existing.grossAmount.toNumber(),
+      platformCommission: existing.platformCommission.toNumber(),
+      doctorNet: existing.doctorNet.toNumber(),
+      currency: existing.currency,
+      type: existing.type,
+      status: existing.status,
+      createdAt: existing.createdAt.toISOString(),
+    };
+  }
+
+  // لو الـ args مش كاملة، ابعت من الـ DB
+  let resolvedCourseId = courseId;
+  let resolvedDoctorId = doctorId;
+  let resolvedStudentId = studentId;
+  let grossAmountNum: number | undefined;
+
+  if (!resolvedCourseId || !resolvedDoctorId || !resolvedStudentId) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { course: { select: { doctorId: true } } },
+    });
+    if (!payment) throw new Error("Payment not found");
+    resolvedCourseId = resolvedCourseId || payment.courseId;
+    resolvedDoctorId = resolvedDoctorId || payment.course?.doctorId;
+    resolvedStudentId = resolvedStudentId || payment.studentId;
+    grossAmountNum = payment.amount.toNumber();
+  }
+
+  const { commission, doctorNet } = await calculateCommission(
+    grossAmountNum || 0
+  );
+
+  const tx = await prisma.financialTransaction.create({
+    data: {
+      paymentId,
+      courseId: resolvedCourseId!,
+      doctorId: resolvedDoctorId!,
+      studentId: resolvedStudentId,
+      grossAmount: grossAmountNum || 0,
+      platformCommission: commission,
+      doctorNet,
+      currency: "EGP",
+      type: "COURSE_SALE",
+      status: "POSTED",
+    },
+  });
+
+  return {
+    id: tx.id,
+    paymentId: tx.paymentId,
+    courseId: tx.courseId,
+    doctorId: tx.doctorId,
+    studentId: tx.studentId,
+    grossAmount: tx.grossAmount.toNumber(),
+    platformCommission: tx.platformCommission.toNumber(),
+    doctorNet: tx.doctorNet.toNumber(),
+    currency: tx.currency,
+    type: tx.type,
+    status: tx.status,
+    createdAt: tx.createdAt.toISOString(),
+  };
+}
+
+/** Create doctor payout request */
+export async function createPayout(
+  doctorId: string,
+  amount: number,
+  method: string,
+  note?: string
+) {
+  const balance = await getDoctorAvailableBalance(doctorId);
+  if (amount > balance) {
+    throw new Error("Insufficient available balance");
+  }
+
+  const payout = await prisma.doctorPayout.create({
+    data: {
+      doctorId,
+      amount,
+      currency: "EGP",
+      method,
+      note: note || null,
+      status: "REQUESTED",
+    },
+  });
+
+  // رجّع كـ number + string مش Decimal + Date
+  return {
+    id: payout.id,
+    doctorId: payout.doctorId,
+    amount: payout.amount.toNumber(),
+    currency: payout.currency,
+    method: payout.method,
+    status: payout.status as any,
+    reference: payout.reference ?? undefined,
+    note: payout.note ?? undefined,
+    createdBy: payout.approvedBy ?? undefined,
+    processedAt: payout.processedAt?.toISOString() ?? undefined,
+    createdAt: payout.createdAt.toISOString(),
+  };
+}
+
 export async function getAdminFinancialSummary() {
   const [grossResult, commissionResult, netResult, completedPayouts, pendingPayouts] =
     await Promise.all([

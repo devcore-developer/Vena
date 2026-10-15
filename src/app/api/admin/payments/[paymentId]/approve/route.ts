@@ -106,9 +106,7 @@ export async function POST(
       });
 
       if (ledgerExists === 0) {
-        const { commission, doctorNet } = await calculateCommission(
-          payment.amount
-        );
+        const { commission, doctorNet } = await calculateCommission(payment.amount.toNumber());
 
         await tx.financialTransaction.create({
           data: {
