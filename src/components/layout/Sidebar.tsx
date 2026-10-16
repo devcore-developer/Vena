@@ -36,7 +36,7 @@ const navConfig: Record<Role, NavItem[]> = {
     { name: "Doctors", href: "/dashboard/admin/doctors", icon: Users },
     { name: "Students", href: "/dashboard/admin/students", icon: Users },
     { name: "Courses", href: "/dashboard/admin/courses", icon: BookOpen },
-    { name: "Free VENA", href: "/dashboard/admin/free-vana", icon: Gift },
+    { name: "Free VENA", href: "/dashboard/admin/free-vena", icon: Gift },
     { name: "Payments", href: "/dashboard/admin/payments", icon: CreditCard },
     { name: "Finance", href: "/dashboard/admin/finance", icon: DollarSign },
     { name: "Support", href: "/dashboard/admin/support", icon: MessageSquare },

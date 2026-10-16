@@ -33,7 +33,7 @@ export default function AdminFreeVenaPage() {
     )},
     { header: "Featured", accessor: (row: FreeResource) => row.isFeatured ? "Yes" : "No" },
     { header: "Actions", accessor: (row: FreeResource) => (
-      <Link href={`/dashboard/admin/free-vana/${row.id}/edit`}>
+      <Link href={`/dashboard/admin/free-vena/${row.id}/edit`}>
         <Button size="sm" variant="ghost">Edit</Button>
       </Link>
     )},
@@ -43,7 +43,7 @@ export default function AdminFreeVenaPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-charcoal">Free VENA Management</h1>
-        <Link href="/dashboard/admin/free-vana/new">
+        <Link href="/dashboard/admin/free-vena/new">
           <Button><Plus size={16} className="mr-2" /> Add Resource</Button>
         </Link>
       </div>
