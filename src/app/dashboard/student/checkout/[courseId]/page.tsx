@@ -13,6 +13,8 @@ import {
   ArrowRight,
   Upload,
   X,
+  Lock,
+  BookOpen,
 } from "lucide-react";
 
 interface PaymentConfigResponse {
@@ -38,17 +40,29 @@ interface PaymentResponse {
   createdAt: string;
 }
 
+interface CourseInfo {
+  id: string;
+  title: string;
+  doctorName: string;
+  price: number;
+  isFree: boolean;
+  thumbnailColor?: string;
+  targetYear?: string;
+}
+
 export default function CheckoutPage({ params }: { params: { courseId: string } }) {
   const router = useRouter();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfigResponse | null>(null);
   const [payment, setPayment] = useState<PaymentResponse | null>(null);
+  const [course, setCourse] = useState<CourseInfo | null>(null);
 
   const [selectedMethod, setSelectedMethod] = useState<string>("INSTAPAY");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [yearBlocked, setYearBlocked] = useState(false);
 
   // Receipt state
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -56,20 +70,53 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   const [studentNote, setStudentNote] = useState("");
 
   useEffect(() => {
-    fetch("/api/student/payment-config")
-      .then((r) => r.json())
-      .then((data) => {
-        setPaymentConfig(data);
-        if (data.methods?.length > 0) {
-          setSelectedMethod(data.methods[0]);
+    // Fetch student profile + payment config + course info in parallel
+    Promise.all([
+      fetch("/api/student/profile").then((r) => r.json()),
+      fetch("/api/student/payment-config").then((r) => r.json()),
+      fetch("/api/public/courses").then((r) => r.json()).catch(() => []),
+    ])
+      .then(([profile, payConfig, coursesData]) => {
+        // Setup payment config
+        setPaymentConfig(payConfig);
+        if (payConfig.methods?.length > 0) {
+          setSelectedMethod(payConfig.methods[0]);
         }
+
+        // Find the course
+        const courses = Array.isArray(coursesData) ? coursesData : coursesData.data || [];
+        const c = courses.find((item: any) => item.id === params.courseId);
+
+        if (!c) {
+          setError("Course not found");
+          setLoading(false);
+          return;
+        }
+
+        // Academic Year Verification
+        if (profile.academicYear && c.targetYear && profile.academicYear !== c.targetYear) {
+          setYearBlocked(true);
+          setLoading(false);
+          return;
+        }
+
+        setCourse({
+          id: c.id,
+          title: c.title,
+          doctorName: c.doctorName,
+          price: c.price,
+          isFree: c.isFree,
+          thumbnailColor: c.thumbnailColor,
+          targetYear: c.targetYear,
+        });
+
         setLoading(false);
       })
       .catch(() => {
-        setError("Failed to load payment configuration");
+        setError("Failed to load checkout information");
         setLoading(false);
       });
-  }, []);
+  }, [params.courseId]);
 
   const handleCreatePayment = async () => {
     setSubmitting(true);
@@ -140,6 +187,22 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
     );
   }
 
+  // Year Mismatch Block Screen
+  if (yearBlocked) {
+    return (
+      <Card className="p-8 text-center max-w-md mx-auto">
+        <Lock className="mx-auto text-red-500 mb-4" size={48} />
+        <h2 className="text-xl font-bold text-charcoal">Course Not Available</h2>
+        <p className="text-charcoal-muted mt-2 text-sm">
+          This course is assigned to a different academic year than the one registered on your account. You can only enroll in courses for your current academic year.
+        </p>
+        <Button href="/courses" variant="secondary" size="sm" className="mt-4">
+          Back to Courses
+        </Button>
+      </Card>
+    );
+  }
+
   if (error && !payment) {
     return (
       <Card className="p-8 text-center max-w-md mx-auto">
@@ -164,6 +227,26 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
         <p className="text-charcoal-muted mb-6 text-sm">
           Transfer the exact amount to the account below, then upload your receipt.
         </p>
+
+        {/* Course Summary */}
+        {course && (
+          <Card className="mb-6">
+            <div className="flex items-center gap-4">
+              <div className={`h-16 w-16 rounded-lg ${course.thumbnailColor || "bg-vena-500"} flex items-center justify-center flex-shrink-0`}>
+                <BookOpen className="text-white/80" size={24} />
+              </div>
+              <div className="flex-1">
+                <h2 className="font-semibold text-charcoal">{course.title}</h2>
+                <p className="text-sm text-charcoal-muted">{course.doctorName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-charcoal">
+                  {course.isFree ? "Free" : `${course.price} EGP`}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Payment Instructions */}
         <Card className="mb-6">
@@ -305,6 +388,26 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-charcoal mb-6">Checkout</h1>
+
+      {/* Course Summary */}
+      {course && (
+        <Card className="mb-6">
+          <div className="flex items-center gap-4">
+            <div className={`h-16 w-16 rounded-lg ${course.thumbnailColor || "bg-vena-500"} flex items-center justify-center flex-shrink-0`}>
+              <BookOpen className="text-white/80" size={24} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-charcoal">{course.title}</h2>
+              <p className="text-sm text-charcoal-muted">{course.doctorName}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-charcoal">
+                {course.isFree ? "Free" : `${course.price} EGP`}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <h3 className="font-semibold text-charcoal flex items-center gap-2 mb-4">
