@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
+    "@vercel/blob": "^2.8.2",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "jose": "^6.2.12",
@@ -39,6 +40,8 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.3",
     "jsdom": "^30.1.2",
     "postcss": "^8.4.38",
     "prisma": "^5.14.0",

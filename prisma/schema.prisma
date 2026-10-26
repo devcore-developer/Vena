@@ -95,14 +95,6 @@ enum PaymentMethod {
   VODAFONE_CASH
 }
 
-enum PaymentStatus {
-  PENDING
-  UNDER_REVIEW
-  APPROVED
-  REJECTED
-  CANCELLED
-}
-
 enum CommissionType {
   FIXED
   PERCENTAGE
@@ -119,6 +111,15 @@ enum FinancialTxStatus {
   PENDING
   POSTED
   REVERSED
+}
+
+enum PaymentStatus {
+  AWAITING_PAYMENT
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum PayoutStatus {
@@ -541,7 +542,7 @@ model Payment {
   reviewedAt      DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
-
+  paymentConfigSnapshot Json?
   financialTransactions FinancialTransaction[]
 
   @@index([studentId])
@@ -610,7 +611,6 @@ model DoctorPayout {
   @@index([doctorId])
   @@index([status])
 }
-
 // ============================================================
 // SUPPORT AND COMMUNICATION
 // ============================================================

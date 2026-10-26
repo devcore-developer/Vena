@@ -1,50 +1,59 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { getValidSession } from "@/lib/auth";
+import { getSavedFreeResources } from "@/lib/free-vena";
+import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
-import { FreeResource } from "@/types";
-import { getSavedResources } from "@/lib/free-vena";
-import { Bookmark, FileText } from "lucide-react";
+import { Bookmark, FileText, Video, ExternalLink } from "lucide-react";
+import type { FreeResourceType } from "@prisma/client";
 
-export default function SavedResourcesPage() {
-  const [resources, setResources] = useState<FreeResource[]>([]);
+export const metadata = { title: "Saved Resources" };
 
-  useEffect(() => {
-    // Mock student ID "u4"
-    getSavedResources("u4").then(setResources);
-  }, []);
+function getIcon(type: FreeResourceType) {
+  return type === "VIDEO" ? Video : FileText;
+}
+
+export default async function SavedResourcesPage() {
+  const session = await getValidSession();
+  if (!session) redirect("/login");
+  if (session.role !== "STUDENT") redirect("/dashboard");
+
+  let resources: Awaited<ReturnType<typeof getSavedFreeResources>> = [];
+  try {
+    resources = await getSavedFreeResources(session.userId);
+  } catch {
+    // DB unavailable
+  }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-charcoal mb-6">Saved Free Resources</h1>
-      
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <h1 className="text-3xl font-bold text-charcoal mb-2">Saved Resources</h1>
+      <p className="text-charcoal-muted mb-8">Free VENA resources you've bookmarked.</p>
+
       {resources.length === 0 ? (
-        <Card className="text-center py-12">
-          <Bookmark className="mx-auto h-12 w-12 text-charcoal-muted opacity-50 mb-4" />
-          <h3 className="text-lg font-medium text-charcoal">No saved resources yet</h3>
-          <p className="text-charcoal-muted mt-1 mb-4">Save useful materials to access them quickly later.</p>
-          <Link href="/free"><Button>Explore Free VENA</Button></Link>
-        </Card>
+        <EmptyState icon={Bookmark} title="No saved resources" description="Browse Free VENA and bookmark resources to find them here." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {resources.map(res => (
-            <Card key={res.id} className="flex flex-col">
-              <div className="flex items-start gap-3 mb-4">
-                <div className="p-2 bg-vena-50 rounded-lg">
-                  <FileText className="text-vena-600" size={20} />
+          {resources.map((r) => {
+            const Icon = getIcon(r.type as FreeResourceType);
+            return (
+              <Card key={r.id} className="overflow-hidden p-0">
+                <div className={`h-24 ${r.thumbnail || "bg-vena-500"} flex items-center justify-center`}>
+                  <Icon className="text-white/80" size={28} />
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-charcoal text-sm">{res.title}</h3>
-                  <p className="text-xs text-charcoal-muted">{res.type}</p>
+                <div className="p-4">
+                  <Badge variant="info">{r.type}</Badge>
+                  <h3 className="text-sm font-semibold text-charcoal mt-2">{r.title}</h3>
+                  {r.description && <p className="text-xs text-charcoal-muted mt-1 line-clamp-2">{r.description}</p>}
+                  <div className="mt-3 pt-3 border-t border-vena-50">
+                    {r.resourceUrl && <Button href={r.resourceUrl} variant="secondary" size="sm" className="w-full"><ExternalLink className="mr-1 h-3.5 w-3.5" /> Open</Button>}
+                    {r.videoUrl && <Button href={r.videoUrl} variant="secondary" size="sm" className="w-full"><Video className="mr-1 h-3.5 w-3.5" /> Watch</Button>}
+                  </div>
                 </div>
-              </div>
-              <Link href={`/free/resources/${res.slug}`} className="mt-auto">
-                <Button variant="secondary" size="sm" className="w-full">Open Resource</Button>
-              </Link>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

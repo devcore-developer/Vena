@@ -13,6 +13,13 @@ export async function POST(
   try {
     const { rejectionReason } = await req.json();
 
+    if (!rejectionReason?.trim()) {
+      return NextResponse.json(
+        { error: "Rejection reason is required" },
+        { status: 400 }
+      );
+    }
+
     const payment = await prisma.payment.findUnique({
       where: { id: params.paymentId },
       include: { course: { select: { title: true } } },
@@ -29,25 +36,16 @@ export async function POST(
       );
     }
 
-    if (payment.status === "REJECTED" || payment.status === "CANCELLED") {
-      return NextResponse.json(
-        { error: "Payment already rejected or cancelled" },
-        { status: 409 }
-      );
-    }
-
-    // Update payment status (does NOT activate enrollment)
     await prisma.payment.update({
       where: { id: params.paymentId },
       data: {
         status: "REJECTED",
-        rejectionReason: rejectionReason || "Payment rejected by administrator",
+        rejectionReason: rejectionReason.trim(),
         reviewedBy: auth.session.userId,
         reviewedAt: new Date(),
       },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         actorId: auth.session.userId,
@@ -57,12 +55,11 @@ export async function POST(
       },
     });
 
-    // Notify student
     await createNotification(
       payment.studentId,
       "SYSTEM",
       "Payment Rejected",
-      `Your payment for ${payment.course.title} was rejected. ${rejectionReason || ""}`,
+      `Your payment for ${payment.course.title} was rejected. Reason: ${rejectionReason}`,
       "/dashboard/student/payments"
     );
 

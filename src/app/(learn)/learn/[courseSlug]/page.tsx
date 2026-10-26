@@ -1,44 +1,84 @@
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import { getSession } from "@/lib/auth";
-import { canAccessCourse } from "@/lib/enrollment";
-import { coursesDB } from "@/data/mock/database";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Lock } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { getValidSession } from "@/lib/auth";
+import { redirect, notFound } from "next/navigation";
 import LearnClientView from "./LearnClientView";
 
-export default async function LearnCoursePage({ params }: { params: { courseSlug: string } }) {
-  const session = await getSession();
-  
-  // 1. Authenticate
-  if (!session) {
-    redirect("/login");
+export async function generateMetadata({ params }: { params: { courseSlug: string } }) {
+  try {
+    const course = await prisma.course.findUnique({ where: { slug: params.courseSlug } });
+    return { title: course?.title || "Learn" };
+  } catch {
+    return { title: "Learn" };
+  }
+}
+
+export default async function LearnPage({ params }: { params: { courseSlug: string } }) {
+  const session = await getValidSession();
+  if (!session) redirect("/login");
+  if (session.role !== "STUDENT") redirect("/dashboard");
+
+  let course: any = null;
+  try {
+    course = await prisma.course.findUnique({
+      where: { slug: params.courseSlug, status: "PUBLISHED" },
+      include: {
+        doctor: { select: { name: true } },
+        sections: {
+          include: { lessons: { orderBy: { order: "asc" } } },
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+  } catch {
+    // DB unavailable
   }
 
-  const course = coursesDB.find(c => c.slug === params.courseSlug);
-  if (!course) return <div className="p-10 text-center">Course not found</div>;
+  if (!course) notFound();
 
-  // 2. Server-Side Authorization Check
-  const hasAccess = await canAccessCourse(session.userId, course.id);
-  
-  if (!hasAccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <Card className="max-w-md text-center p-8">
-          <Lock className="mx-auto h-12 w-12 text-red-500 mb-4" />
-          <h1 className="text-xl font-bold text-charcoal mb-2">Access Denied</h1>
-          <p className="text-charcoal-muted mb-6">
-            You do not have active access to this course. Please enroll or check your enrollment status.
-          </p>
-          <Link href={`/courses/${course.slug}`}>
-            <Button>View Course Details</Button>
-          </Link>
-        </Card>
-      </div>
-    );
+  // Verify enrollment
+  const enrollment = await prisma.enrollment.findUnique({
+    where: {
+      studentId_courseId: { studentId: session.userId, courseId: course.id },
+    },
+  });
+
+  if (!enrollment || (enrollment.status !== "ACTIVE" && enrollment.status !== "COMPLETED")) {
+    redirect(`/courses/${course.slug}`);
   }
 
-  // 3. Render Client View if authorized
-  return <LearnClientView course={course} studentId={session.userId} />;
+  // Get lesson progress
+  const lessonIds = course.sections.flatMap((s: any) => s.lessons.map((l: any) => l.id));
+  const progress = await prisma.lessonProgress.findMany({
+    where: { studentId: session.userId, lessonId: { in: lessonIds } },
+  });
+
+  const progressMap = new Map(progress.map((p) => [p.lessonId, p.completed]));
+
+  const serializedCourse = {
+    id: course.id,
+    title: course.title,
+    description: course.description,
+    doctorName: course.doctor.name,
+    sections: course.sections.map((s: any) => ({
+      id: s.id,
+      title: s.title,
+      lessons: s.lessons.map((l: any) => ({
+        id: l.id,
+        title: l.title,
+        type: l.type,
+        content: l.content,
+        resourceUrl: l.resourceUrl,
+        duration: l.duration,
+        isPreview: l.isPreview,
+        isCompleted: progressMap.get(l.id) || false,
+      })),
+    })),
+    enrollment: {
+      id: enrollment.id,
+      status: enrollment.status,
+      progress: enrollment.progress,
+    },
+  };
+
+  return <LearnClientView course={serializedCourse} />;
 }

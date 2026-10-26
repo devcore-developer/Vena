@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/auth-utils";
+import { getPaymentConfig, snapshotPaymentConfig, generatePaymentReference, getEnabledMethods } from "@/lib/paymentConfig";
+import type { PaymentMethod } from "@prisma/client";
 
 export async function GET() {
   const auth = await requireStudent();
@@ -28,6 +30,7 @@ export async function GET() {
     rejectionReason: p.rejectionReason,
     reviewedAt: p.reviewedAt?.toISOString(),
     createdAt: p.createdAt.toISOString(),
+    paymentConfigSnapshot: p.paymentConfigSnapshot,
   }));
 
   return NextResponse.json(data);
@@ -39,7 +42,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { courseId, method, referenceNumber, proofUrl, studentNote } = body;
+    const { courseId, method } = body;
 
     if (!courseId || !method) {
       return NextResponse.json(
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Get authoritative course price from DB (NOT from client)
+    // 1. Get authoritative course price from DB
     const course = await prisma.course.findUnique({
       where: { id: courseId },
       select: { id: true, title: true, price: true, status: true, doctorId: true },
@@ -82,23 +85,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Check for existing PENDING payment (prevent duplicates)
+    // 3. Check for existing pending/awaiting payment (prevent duplicates)
     const existingPayment = await prisma.payment.findFirst({
       where: {
         studentId: auth.session.userId,
         courseId,
-        status: { in: ["PENDING", "UNDER_REVIEW"] },
+        status: { in: ["AWAITING_PAYMENT", "PENDING", "UNDER_REVIEW"] },
       },
     });
 
     if (existingPayment) {
       return NextResponse.json(
-        { error: "You already have a pending payment for this course" },
+        {
+          error: "You already have a pending payment for this course. Please complete or cancel it first.",
+          existingPaymentId: existingPayment.id,
+        },
         { status: 409 }
       );
     }
 
-    // 4. Create payment + enrollment atomically
+    // 4. Validate payment method is enabled
+    const config = await getPaymentConfig();
+    const enabledMethods = getEnabledMethods(config);
+
+    if (!enabledMethods.includes(method)) {
+      return NextResponse.json(
+        { error: "This payment method is not available" },
+        { status: 400 }
+      );
+    }
+
+    // 5. Generate unique reference
+    const referenceNumber = generatePaymentReference();
+
+    // 6. Snapshot payment config (so later changes don't affect this request)
+    const configSnapshot = snapshotPaymentConfig(config, method);
+
+    // 7. Create payment + enrollment atomically
     const result = await prisma.$transaction(async (tx) => {
       // Create or update enrollment to PENDING
       let enrollment = existingEnrollment;
@@ -113,19 +136,28 @@ export async function POST(req: Request) {
         });
       }
 
-      // Create payment with SERVER-SIDE price
+      // Create payment with AWAITING_PAYMENT status (no receipt yet)
       const payment = await tx.payment.create({
         data: {
           studentId: auth.session.userId,
           courseId,
           enrollmentId: enrollment.id,
-          amount: course.price, // Authoritative from DB
+          amount: course.price,
           currency: "EGP",
-          method,
-          status: "PENDING",
-          referenceNumber: referenceNumber || null,
-          proofUrl: proofUrl || null,
-          studentNote: studentNote || null,
+          method: method as PaymentMethod,
+          status: "AWAITING_PAYMENT",
+          referenceNumber,
+          paymentConfigSnapshot: configSnapshot as any,
+        },
+      });
+
+      // Audit log
+      await tx.auditLog.create({
+        data: {
+          actorId: auth.session.userId,
+          action: "PAYMENT_REQUEST_CREATED",
+          entityType: "Payment",
+          entityId: payment.id,
         },
       });
 
@@ -134,15 +166,17 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       id: result.id,
+      referenceNumber: result.referenceNumber,
       amount: result.amount.toNumber(),
       currency: result.currency,
       method: result.method,
       status: result.status,
+      paymentConfigSnapshot: result.paymentConfigSnapshot,
       createdAt: result.createdAt.toISOString(),
     });
   } catch {
     return NextResponse.json(
-      { error: "Failed to create payment" },
+      { error: "Failed to create payment request" },
       { status: 500 }
     );
   }

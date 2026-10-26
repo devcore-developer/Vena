@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-utils";
-import { calculateCommission, hasFinancialTransaction } from "@/lib/finance";
+import { calculateCommission } from "@/lib/finance";
 import { createNotification } from "@/lib/notifications";
 
 export async function POST(
@@ -12,9 +12,7 @@ export async function POST(
   if (!auth.ok) return auth.response;
 
   try {
-    // Atomic transaction: approve payment + activate enrollment + create ledger
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Get payment with course info
       const payment = await tx.payment.findUnique({
         where: { id: params.paymentId },
         include: {
@@ -23,21 +21,13 @@ export async function POST(
         },
       });
 
-      if (!payment) {
-        throw new Error("PAYMENT_NOT_FOUND");
-      }
+      if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+      if (payment.status === "APPROVED") throw new Error("ALREADY_APPROVED");
+      if (["REJECTED", "CANCELLED"].includes(payment.status)) throw new Error("CANNOT_APPROVE");
 
-      // 2. Idempotency check — cannot approve twice
-      if (payment.status === "APPROVED") {
-        throw new Error("ALREADY_APPROVED");
-      }
+      // Must have a receipt uploaded (cannot approve without proof)
+      if (!payment.proofUrl) throw new Error("NO_RECEIPT");
 
-      // 3. Status validation
-      if (payment.status === "REJECTED" || payment.status === "CANCELLED") {
-        throw new Error("CANNOT_APPROVE");
-      }
-
-      // 4. Update payment status
       await tx.payment.update({
         where: { id: params.paymentId },
         data: {
@@ -47,67 +37,40 @@ export async function POST(
         },
       });
 
-      // 5. Activate enrollment (create if doesn't exist)
+      // Activate enrollment
       if (payment.enrollment) {
         await tx.enrollment.update({
           where: { id: payment.enrollmentId! },
-          data: {
-            status: "ACTIVE",
-            activatedAt: new Date(),
-          },
+          data: { status: "ACTIVE", activatedAt: new Date() },
         });
       } else {
-        // Check if enrollment exists without payment link
-        const existingEnrollment = await tx.enrollment.findUnique({
-          where: {
-            studentId_courseId: {
-              studentId: payment.studentId,
-              courseId: payment.courseId,
-            },
-          },
+        const existingEnr = await tx.enrollment.findUnique({
+          where: { studentId_courseId: { studentId: payment.studentId, courseId: payment.courseId } },
         });
-
-        if (existingEnrollment) {
+        if (existingEnr) {
           await tx.enrollment.update({
-            where: { id: existingEnrollment.id },
-            data: {
-              status: "ACTIVE",
-              activatedAt: new Date(),
-            },
+            where: { id: existingEnr.id },
+            data: { status: "ACTIVE", activatedAt: new Date() },
           });
-
-          // Link payment to enrollment
           await tx.payment.update({
             where: { id: params.paymentId },
-            data: { enrollmentId: existingEnrollment.id },
+            data: { enrollmentId: existingEnr.id },
           });
         } else {
-          // Create new enrollment
-          const newEnrollment = await tx.enrollment.create({
-            data: {
-              studentId: payment.studentId,
-              courseId: payment.courseId,
-              status: "ACTIVE",
-              activatedAt: new Date(),
-              progress: 0,
-            },
+          const newEnr = await tx.enrollment.create({
+            data: { studentId: payment.studentId, courseId: payment.courseId, status: "ACTIVE", activatedAt: new Date(), progress: 0 },
           });
-
           await tx.payment.update({
             where: { id: params.paymentId },
-            data: { enrollmentId: newEnrollment.id },
+            data: { enrollmentId: newEnr.id },
           });
         }
       }
 
-      // 6. Create financial transaction (idempotent)
-      const ledgerExists = await tx.financialTransaction.count({
-        where: { paymentId: params.paymentId },
-      });
-
+      // Create financial transaction (idempotent)
+      const ledgerExists = await tx.financialTransaction.count({ where: { paymentId: params.paymentId } });
       if (ledgerExists === 0) {
         const { commission, doctorNet } = await calculateCommission(payment.amount.toNumber());
-
         await tx.financialTransaction.create({
           data: {
             paymentId: params.paymentId,
@@ -124,7 +87,6 @@ export async function POST(
         });
       }
 
-      // 7. Create audit log
       await tx.auditLog.create({
         data: {
           actorId: auth.session.userId,
@@ -137,7 +99,6 @@ export async function POST(
       return payment;
     });
 
-    // 8. Notify student (outside transaction — failure doesn't rollback approval)
     await createNotification(
       result.studentId,
       "PAYMENT_APPROVED",
@@ -149,26 +110,10 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-
-    if (msg === "PAYMENT_NOT_FOUND") {
-      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
-    }
-    if (msg === "ALREADY_APPROVED") {
-      return NextResponse.json(
-        { error: "Payment already approved" },
-        { status: 409 }
-      );
-    }
-    if (msg === "CANNOT_APPROVE") {
-      return NextResponse.json(
-        { error: "Cannot approve a rejected or cancelled payment" },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Failed to approve payment" },
-      { status: 500 }
-    );
+    if (msg === "PAYMENT_NOT_FOUND") return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    if (msg === "ALREADY_APPROVED") return NextResponse.json({ error: "Payment already approved" }, { status: 409 });
+    if (msg === "CANNOT_APPROVE") return NextResponse.json({ error: "Cannot approve a rejected or cancelled payment" }, { status: 400 });
+    if (msg === "NO_RECEIPT") return NextResponse.json({ error: "No receipt uploaded. Cannot approve without proof." }, { status: 400 });
+    return NextResponse.json({ error: "Failed to approve payment" }, { status: 500 });
   }
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
@@ -10,11 +9,11 @@ import { Modal } from "@/components/ui/Modal";
 import { BookOpen, Plus, Search, Users, Pencil, Eye } from "lucide-react";
 import { Course, CourseStatus } from "@/types";
 
-const CATEGORY_OPTIONS = [
-  { id: "cat1", name: "Cardiology" },
-  { id: "cat2", name: "Internal Medicine" },
-  { id: "cat3", name: "Pediatrics" },
-];
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -22,6 +21,7 @@ function formatDate(dateStr: string): string {
 
 export default function DoctorCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
@@ -30,7 +30,7 @@ export default function DoctorCoursesPage() {
   const [form, setForm] = useState({
     title: "",
     shortDescription: "",
-    categoryId: "cat1",
+    categoryId: "",
     price: "",
     level: "BEGINNER",
     language: "ENGLISH",
@@ -45,7 +45,15 @@ export default function DoctorCoursesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => {
+    fetchCourses();
+
+    // Fetch categories
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((data) => setCategories(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const filtered = courses.filter(c => {
     const matchSearch = c.title.toLowerCase().includes(search.toLowerCase());
@@ -63,7 +71,7 @@ export default function DoctorCoursesPage() {
     });
     if (res.ok) {
       setShowCreate(false);
-      setForm({ title: "", shortDescription: "", categoryId: "cat1", price: "", level: "BEGINNER", language: "ENGLISH" });
+      setForm({ title: "", shortDescription: "", categoryId: "", price: "", level: "BEGINNER", language: "ENGLISH" });
       await fetchCourses();
     }
     setCreating(false);
@@ -121,7 +129,7 @@ export default function DoctorCoursesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map(course => {
-            const category = CATEGORY_OPTIONS.find(c => c.id === course.categoryId);
+            const category = categories.find(c => c.id === course.categoryId);
             return (
               <Card key={course.id} className="overflow-hidden p-0 flex flex-col">
                 <div className={`h-32 ${course.thumbnailColor || "bg-vena-500"} relative flex items-center justify-center`}>
@@ -132,7 +140,7 @@ export default function DoctorCoursesPage() {
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                   <span className="text-xs font-medium text-vena-600 bg-vena-50 px-2 py-1 rounded inline-block w-fit">
-                    {category?.name || "Uncategorized"}
+                    {category?.name || (typeof course.category === "object" ? course.category?.name : course.category) || "Uncategorized"}
                   </span>
                   <h3 className="text-lg font-semibold text-charcoal mt-2">{course.title}</h3>
                   <p className="text-sm text-charcoal-muted mt-1 line-clamp-2">{course.shortDescription}</p>
@@ -190,7 +198,8 @@ export default function DoctorCoursesPage() {
                 onChange={e => setForm({ ...form, categoryId: e.target.value })}
                 className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
               >
-                {CATEGORY_OPTIONS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">Uncategorized</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>

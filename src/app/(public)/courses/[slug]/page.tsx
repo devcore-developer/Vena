@@ -1,132 +1,79 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { coursesDB, enrollmentsDB } from "@/data/mock/database";
-import { Course } from "@/types";
-import { Lock, PlayCircle, CheckCircle } from "lucide-react";
+import { Users, Clock, BookOpen } from "lucide-react";
 
-export default function CourseDetailsPage() {
-  const { slug } = useParams();
-  const router = useRouter();
-  const [course, setCourse] = useState<Course | null>(null);
-  const [enrollmentStatus, setEnrollmentStatus] = useState<string | null>(null);
+export async function generateMetadata({ params }: { params: { slug: string } }) {
+  try {
+    const course = await prisma.course.findUnique({ where: { slug: params.slug } });
+    return { title: course?.title || "Course" };
+  } catch {
+    return { title: "Course" };
+  }
+}
 
-  useEffect(() => {
-    const found = coursesDB.find(c => c.slug === slug);
-    if (found) {
-      setCourse(found);
-      // Mock check if current user (u4) is enrolled
-      const enr = enrollmentsDB.find(e => e.studentId === "u4" && e.courseId === found.id);
-      if (enr) setEnrollmentStatus(enr.status);
-    }
-  }, [slug]);
-
-  if (!course) return <div>Course not found</div>;
-
-  const handleEnroll = async () => {
-    // Mock API call
-    const res = await fetch("/api/student/enrollments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: course.id })
+export default async function CourseDetailPage({ params }: { params: { slug: string } }) {
+  let course: any = null;
+  try {
+    course = await prisma.course.findUnique({
+      where: { slug: params.slug, status: "PUBLISHED" },
+      include: {
+        doctor: { select: { name: true, doctorProfile: true } },
+        category: true,
+        sections: { include: { lessons: true }, orderBy: { order: "asc" } },
+        _count: { select: { enrollments: true } },
+      },
     });
-    if (res.ok) {
-      setEnrollmentStatus("PENDING");
-    }
-  };
+  } catch {
+    // DB unavailable
+  }
 
-  const renderCTA = () => {
-    switch (enrollmentStatus) {
-      case "ACTIVE":
-        return <Link href={`/learn/${course.slug}`}><Button size="lg" className="w-full">Continue Learning</Button></Link>;
-      case "COMPLETED":
-        return <Link href={`/learn/${course.slug}`}><Button size="lg" className="w-full">Review Course</Button></Link>;
-      case "PENDING":
-        return <Button size="lg" className="w-full" disabled>Payment Pending</Button>;
-      case "SUSPENDED":
-        return <Button size="lg" className="w-full" variant="danger" disabled>Access Suspended</Button>;
-      case "CANCELLED":
-        return <Link href={`/dashboard/student/checkout/${course.id}`}><Button size="lg" className="w-full">Enroll Again</Button></Link>;
-      default:
-        if (course.price > 0) {
-          return <Link href={`/dashboard/student/checkout/${course.id}`}><Button size="lg" className="w-full">Enroll Now</Button></Link>;
-        } else {
-          return <Button size="lg" className="w-full" onClick={handleEnroll}>Enroll for Free</Button>;
-        }
-    }
-  };
+  if (!course) notFound();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className={`h-64 ${course.thumbnailColor || "bg-vena-500"} rounded-xl mb-8 flex items-center justify-center`}>
+        <BookOpen className="text-white/80" size={48} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-8">
-          <div>
-            <div className={`h-64 ${course.thumbnailColor} rounded-xl mb-6`}></div>
-            <h1 className="text-3xl font-bold text-charcoal mb-2">{course.title}</h1>
-            <p className="text-charcoal-muted">{course.shortDescription}</p>
-          </div>
+        <div className="lg:col-span-2">
+          <Badge variant="info">{course.category?.name || "Uncategorized"}</Badge>
+          <h1 className="text-3xl font-bold text-charcoal mt-3">{course.title}</h1>
+          <p className="text-charcoal-muted mt-2">By {course.doctor.name}</p>
+          <p className="text-charcoal mt-6">{course.description}</p>
 
-          <Card>
-            <h2 className="text-xl font-semibold text-charcoal mb-4">About this course</h2>
-            <p className="text-charcoal-muted leading-relaxed">{course.description}</p>
-          </Card>
-
-          {/* Curriculum */}
-          <Card>
-            <h2 className="text-xl font-semibold text-charcoal mb-4">Course Curriculum</h2>
-            <div className="space-y-6">
-              {course.sections?.map(section => (
-                <div key={section.id}>
-                  <h3 className="font-medium text-charcoal mb-2">{section.title}</h3>
-                  <div className="space-y-1 border-l-2 border-slate-100 pl-4">
-                    {section.lessons?.map(lesson => (
-                      <div key={lesson.id} className="flex items-center justify-between py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          {lesson.isPreview ? (
-                            <PlayCircle size={16} className="text-vena-500" />
-                          ) : (
-                            <Lock size={16} className="text-charcoal-muted" />
-                          )}
-                          <span className={lesson.isPreview ? "text-charcoal" : "text-charcoal-muted"}>
-                            {lesson.title}
-                          </span>
-                        </div>
-                        <span className="text-xs text-charcoal-muted">{lesson.duration} min</span>
-                      </div>
-                    ))}
-                  </div>
+          <h2 className="text-xl font-bold text-charcoal mt-8 mb-4">Course Content</h2>
+          <div className="space-y-3">
+            {course.sections.map((section: any) => (
+              <Card key={section.id}>
+                <h3 className="font-semibold text-charcoal">{section.title}</h3>
+                <div className="mt-2 space-y-1">
+                  {section.lessons.map((lesson: any) => (
+                    <div key={lesson.id} className="flex items-center gap-2 text-sm text-charcoal-muted py-1">
+                      <BookOpen size={14} /> {lesson.title}
+                      {lesson.isPreview && <Badge variant="success">Preview</Badge>}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </Card>
+              </Card>
+            ))}
+          </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="lg:col-span-1">
+        <div>
           <Card className="sticky top-24">
-            <div className="text-center mb-6">
-              <p className="text-3xl font-bold text-charcoal">{course.price} EGP</p>
-            </div>
-            {renderCTA()}
-            <div className="mt-6 space-y-3 text-sm">
-              <div className="flex justify-between text-charcoal-muted">
-                <span>Doctor</span>
-                <span className="text-charcoal font-medium">{course.doctorName}</span>
-              </div>
-              <div className="flex justify-between text-charcoal-muted">
-                <span>Level</span>
-                <span className="text-charcoal font-medium">{course.level}</span>
-              </div>
-              <div className="flex justify-between text-charcoal-muted">
-                <span>Duration</span>
-                <span className="text-charcoal font-medium">{course.estimatedDuration} min</span>
-              </div>
+            <p className="text-3xl font-bold text-charcoal">
+              {course.price.toNumber() === 0 ? "Free" : `${course.price.toNumber()} EGP`}
+            </p>
+            <Button href={`/dashboard/student/checkout/${course.id}`} className="w-full mt-4">
+              Enroll Now
+            </Button>
+            <div className="mt-6 space-y-2 text-sm text-charcoal-muted">
+              <div className="flex items-center gap-2"><Users size={16} /> {course._count.enrollments} students</div>
+              <div className="flex items-center gap-2"><Clock size={16} /> {course.estimatedDuration || "Self-paced"}</div>
             </div>
           </Card>
         </div>

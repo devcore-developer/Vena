@@ -1,145 +1,179 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ArrowLeft, Save } from "lucide-react";
 
-export default function NewLessonPage() {
-  const { courseId } = useParams();
+export default function NewLessonPage({
+  params,
+}: {
+  params: { courseId: string };
+}) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [type, setType] = useState("VIDEO");
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     title: "",
-    description: "",
-    sectionId: "sec1", // Mock: assumes first section
-    duration: "0",
-    isPreview: false,
+    type: "VIDEO",
     content: "",
-    resourceUrl: ""
+    resourceUrl: "",
+    duration: 0,
+    isPreview: false,
+    isPublished: true,
+    sectionId: "",
+    newSectionTitle: "",
   });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    
-    const res = await fetch(`/api/doctor/courses/${courseId}/lessons`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...formData, type, isPublished: true })
-    });
+    setSaving(true);
+    setError("");
 
-    if (res.ok) {
-      router.push(`/dashboard/doctor/courses/${courseId}`);
-    } else {
-      setLoading(false);
+    try {
+      // Create section if needed
+      let sectionId = form.sectionId;
+      if (!sectionId && form.newSectionTitle) {
+        const sectionRes = await fetch(`/api/doctor/courses/${params.courseId}/sections`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: form.newSectionTitle }),
+        });
+        if (sectionRes.ok) {
+          const section = await sectionRes.json();
+          sectionId = section.id;
+        }
+      }
+
+      if (!sectionId) {
+        setError("Please select or create a section");
+        setSaving(false);
+        return;
+      }
+
+      const res = await fetch(`/api/doctor/courses/${params.courseId}/lessons`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title,
+          type: form.type,
+          content: form.content,
+          resourceUrl: form.resourceUrl,
+          duration: parseInt(String(form.duration)) || 0,
+          isPreview: form.isPreview,
+          isPublished: form.isPublished,
+          sectionId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to create lesson");
+        setSaving(false);
+        return;
+      }
+
+      router.push(`/dashboard/doctor/courses/${params.courseId}`);
+      router.refresh();
+    } catch {
+      setError("Something went wrong");
+      setSaving(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-charcoal mb-6">Create New Lesson</h1>
-      
-      <form onSubmit={handleSubmit}>
-        <Card className="space-y-6 mb-6">
+    <div>
+      <button onClick={() => router.back()} className="flex items-center gap-1 text-sm text-charcoal-muted hover:text-vena-700 mb-4">
+        <ArrowLeft size={16} /> Back
+      </button>
+
+      <h1 className="text-2xl font-bold text-charcoal mb-6">Add New Lesson</h1>
+
+      <Card>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100">{error}</div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-charcoal mb-1">Lesson Title</label>
-            <input
-              type="text"
-              required
-              value={formData.title}
-              onChange={e => setFormData({...formData, title: e.target.value})}
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none"
-              placeholder="e.g. Introduction to Anatomy"
-            />
+            <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm"
+              placeholder="e.g. Introduction to Anatomy" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-charcoal mb-1">Lesson Type</label>
-            <select
-              value={type}
-              onChange={e => setType(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none bg-white"
-            >
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="w-full px-4 py-2.5 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500">
               <option value="VIDEO">Video</option>
-              <option value="TEXT">Text / Article</option>
               <option value="PDF">PDF Document</option>
-              <option value="FILE">Downloadable File</option>
+              <option value="TEXT">Text Content</option>
+              <option value="FILE">File</option>
             </select>
           </div>
 
-          {/* Dynamic Content Fields */}
-          {type === "VIDEO" && (
+          {form.type === "VIDEO" && (
             <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Video URL (YouTube/Vimeo)</label>
-              <input
-                type="url"
-                value={formData.resourceUrl}
-                onChange={e => setFormData({...formData, resourceUrl: e.target.value})}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none"
-                placeholder="https://youtube.com/embed/..."
-              />
-            </div>
-          )}
-          
-          {type === "TEXT" && (
-            <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Content (HTML)</label>
-              <textarea
-                rows={6}
-                value={formData.content}
-                onChange={e => setFormData({...formData, content: e.target.value})}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none font-mono"
-                placeholder="<h2>Lesson Title</h2><p>Content here...</p>"
-              />
+              <label className="block text-sm font-medium text-charcoal mb-1">Video URL</label>
+              <input type="url" value={form.resourceUrl} onChange={(e) => setForm({ ...form, resourceUrl: e.target.value })}
+                className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm"
+                placeholder="https://youtube.com/embed/..." />
             </div>
           )}
 
-          {(type === "PDF" || type === "FILE") && (
+          {form.type === "PDF" && (
             <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Resource URL</label>
-              <input
-                type="url"
-                value={formData.resourceUrl}
-                onChange={e => setFormData({...formData, resourceUrl: e.target.value})}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none"
-                placeholder="https://storage.vena.com/file.pdf"
-              />
-              <p className="text-xs text-charcoal-muted mt-1">In production, this will be an upload widget.</p>
+              <label className="block text-sm font-medium text-charcoal mb-1">PDF URL</label>
+              <input type="url" value={form.resourceUrl} onChange={(e) => setForm({ ...form, resourceUrl: e.target.value })}
+                className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm" />
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          {form.type === "TEXT" && (
             <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Duration (min)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.duration}
-                onChange={e => setFormData({...formData, duration: e.target.value})}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none"
-              />
+              <label className="block text-sm font-medium text-charcoal mb-1">Content</label>
+              <textarea rows={6} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })}
+                className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm resize-none"
+                placeholder="Write your lesson content..." />
             </div>
-            <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2 text-sm text-charcoal">
-                <input
-                  type="checkbox"
-                  checked={formData.isPreview}
-                  onChange={e => setFormData({...formData, isPreview: e.target.checked})}
-                  className="rounded text-vena-500 focus:ring-vena-500"
-                />
-                Free Preview Lesson
-              </label>
-            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-1">Duration (minutes)</label>
+            <input type="number" min="0" value={form.duration} onChange={(e) => setForm({ ...form, duration: parseInt(e.target.value) || 0 })}
+              className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm" />
           </div>
-        </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
-          <Button type="submit" isLoading={loading}>Save Lesson</Button>
-        </div>
-      </form>
+          <div className="border-t border-vena-50 pt-4">
+            <label className="block text-sm font-medium text-charcoal mb-2">Section</label>
+            <input type="text" value={form.newSectionTitle} onChange={(e) => setForm({ ...form, newSectionTitle: e.target.value })}
+              className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm mb-2"
+              placeholder="Create new section (or leave blank to use existing)" />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-charcoal">
+              <input type="checkbox" checked={form.isPreview} onChange={(e) => setForm({ ...form, isPreview: e.target.checked })}
+                className="rounded text-vena-500 focus:ring-vena-500" />
+              Preview (free lesson)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-charcoal">
+              <input type="checkbox" checked={form.isPublished} onChange={(e) => setForm({ ...form, isPublished: e.target.checked })}
+                className="rounded text-vena-500 focus:ring-vena-500" />
+              Published
+            </label>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-vena-50">
+            <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
+            <Button type="submit" isLoading={saving}>
+              <Save className="mr-2 h-4 w-4" /> Create Lesson
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

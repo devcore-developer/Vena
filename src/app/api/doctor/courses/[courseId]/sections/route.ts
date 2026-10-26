@@ -1,38 +1,49 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { coursesDB } from "@/data/mock/database";
+import { prisma } from "@/lib/prisma";
+import { requireDoctorAccess } from "@/lib/auth-utils";
+import type { Permission } from "@/types";
 
 export async function POST(
   req: Request,
-  { params }: { params: { courseId: string } } // التعديل هنا
+  { params }: { params: { courseId: string } }
 ) {
-  const session = await getSession();
-  if (!session || (session.role !== "DOCTOR" && session.role !== "SECRETARY")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const course = coursesDB.find(c => c.id === params.courseId); // التعديل هنا
-  if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-
-  if (session.role === "DOCTOR" && course.doctorId !== session.userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
+  if (!auth.ok) return auth.response;
 
   try {
-    const { title } = await req.json();
-    const newSection = {
-      id: `sec${Date.now()}`,
-      courseId: course.id,
-      title,
-      order: course.sections?.length || 0,
-      lessons: []
-    };
-    
-    if (!course.sections) course.sections = [];
-    course.sections.push(newSection);
-    
-    return NextResponse.json(newSection);
-  } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const course = await prisma.course.findUnique({
+      where: { id: params.courseId },
+      select: { doctorId: true },
+    });
+
+    if (!course || course.doctorId !== auth.session.userId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const { title, description } = await req.json();
+
+    if (!title?.trim()) {
+      return NextResponse.json({ error: "Section title is required" }, { status: 400 });
+    }
+
+    // Get max order
+    const lastSection = await prisma.courseSection.findFirst({
+      where: { courseId: params.courseId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+
+    const section = await prisma.courseSection.create({
+      data: {
+        courseId: params.courseId,
+        title: title.trim(),
+        description: description || null,
+        order: (lastSection?.order || 0) + 1,
+      },
+    });
+
+    return NextResponse.json(section);
+  } catch {
+    return NextResponse.json({ error: "Failed to create section" }, { status: 500 });
   }
 }

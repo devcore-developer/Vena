@@ -1,66 +1,87 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { examAttemptsDB } from "@/data/mock/database"; // In real app, fetch from API
-import Link from "next/link";
+import { Badge } from "@/components/ui/Badge";
+import { CheckCircle, XCircle, Award, RotateCcw } from "lucide-react";
 
-export default function ResultPage() {
-  const { attemptId } = useParams();
-  const [attempt, setAttempt] = useState<any>(null);
+export default function ExamResultPage({
+  params,
+}: {
+  params: { examId: string; attemptId: string };
+}) {
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock: fetch attempt result
-    const found = examAttemptsDB.find(a => a.id === attemptId);
-    setAttempt(found);
-  }, [attemptId]);
+    fetch(`/api/student/exams/${params.examId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const attempt = data.attempts?.find((a: any) => a.id === params.attemptId);
+        setResult(attempt || null);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [params.examId, params.attemptId]);
 
-  if (!attempt) return <div>Loading results...</div>;
+  if (loading) return <div className="animate-pulse h-64 bg-vena-50 rounded-xl" />;
+
+  if (!result) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-charcoal-muted">Result not found.</p>
+        <Button href="/dashboard/student/exams" variant="secondary" size="sm" className="mt-4">
+          Back to Exams
+        </Button>
+      </Card>
+    );
+  }
+
+  const passed = result.passed;
+  const percentage = result.percentage || 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <Card className="max-w-md w-full text-center">
-        <h1 className="text-2xl font-bold text-charcoal mb-2">Exam Results</h1>
-        
-        <div className="my-8">
-          {attempt.status === "SUBMITTED" ? (
-            <div className="text-amber-600">
-              <AlertCircle className="mx-auto h-12 w-12 mb-2" />
-              <p className="font-semibold text-lg">Awaiting Manual Grading</p>
-              <p className="text-sm text-charcoal-muted">Your objective questions have been graded. Please wait for essay grading.</p>
-            </div>
-          ) : (
-            <>
-              <div className={`text-5xl font-bold mb-2 ${attempt.passed ? "text-green-600" : "text-red-600"}`}>
-                {attempt.percentage}%
-              </div>
-              <Badge variant={attempt.passed ? "success" : "danger"}>
-                {attempt.passed ? "PASSED" : "FAILED"}
-              </Badge>
-            </>
-          )}
+    <div className="max-w-2xl mx-auto py-8">
+      <Card className="p-8 text-center">
+        {passed === null ? (
+          <Award className="mx-auto text-amber-500 mb-4" size={64} />
+        ) : passed ? (
+          <CheckCircle className="mx-auto text-green-500 mb-4" size={64} />
+        ) : (
+          <XCircle className="mx-auto text-red-500 mb-4" size={64} />
+        )}
+
+        <h1 className="text-2xl font-bold text-charcoal">
+          {passed === null ? "Pending Grading" : passed ? "Congratulations!" : "Better Luck Next Time"}
+        </h1>
+        <p className="text-charcoal-muted mt-2 mb-6">
+          {passed === null
+            ? "Your exam includes essay questions that require manual grading."
+            : `You ${passed ? "passed" : "failed"} the exam.`}
+        </p>
+
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-vena-50 rounded-lg">
+            <p className="text-xs text-charcoal-muted">Score</p>
+            <p className="text-xl font-bold text-charcoal">{result.score || 0}</p>
+          </div>
+          <div className="p-4 bg-vena-50 rounded-lg">
+            <p className="text-xs text-charcoal-muted">Percentage</p>
+            <p className="text-xl font-bold text-charcoal">{percentage}%</p>
+          </div>
+          <div className="p-4 bg-vena-50 rounded-lg">
+            <p className="text-xs text-charcoal-muted">Status</p>
+            <Badge variant={passed ? "success" : "danger"}>{result.status}</Badge>
+          </div>
         </div>
 
-        <div className="space-y-2 text-left bg-slate-50 p-4 rounded-lg mb-6">
-          <div className="flex justify-between text-sm">
-            <span className="text-charcoal-muted">Score</span>
-            <span className="font-medium text-charcoal">{attempt.score} points</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-charcoal-muted">Status</span>
-            <span className="font-medium text-charcoal">{attempt.status}</span>
-          </div>
+        <div className="flex gap-3 justify-center">
+          <Button href="/dashboard/student/exams" variant="secondary">
+            <RotateCcw size={16} className="mr-2" /> Back to Exams
+          </Button>
         </div>
-
-        <Link href="/dashboard/student">
-          <Button className="w-full">Back to Dashboard</Button>
-        </Link>
       </Card>
     </div>
   );
 }
-
-import { AlertCircle } from "lucide-react";

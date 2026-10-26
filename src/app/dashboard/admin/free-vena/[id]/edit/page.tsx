@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -15,11 +15,11 @@ const RESOURCE_TYPES = [
   { value: "LINK", label: "External Link" },
 ];
 
-const CATEGORIES = [
-  { id: "cat1", name: "Cardiology" },
-  { id: "cat2", name: "Internal Medicine" },
-  { id: "cat3", name: "Pediatrics" },
-];
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 export default function EditFreeResourcePage({
   params,
@@ -27,6 +27,7 @@ export default function EditFreeResourcePage({
   params: { id: string };
 }) {
   const router = useRouter();
+  const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -43,6 +44,13 @@ export default function EditFreeResourcePage({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Fetch categories
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((data) => setCategories(Array.isArray(data) ? data : []))
+      .catch(() => {});
+
+    // Fetch resource
     fetch(`/api/admin/free-vena/${params.id}`)
       .then((res) => {
         if (!res.ok) throw new Error("Not found");
@@ -204,7 +212,7 @@ export default function EditFreeResourcePage({
                 className="w-full px-4 py-2.5 border border-vena-100 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
               >
                 <option value="">Uncategorized</option>
-                {CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
