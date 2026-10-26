@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Search, BookOpen, PlayCircle, Award } from "lucide-react";
+import { BookOpen, PlayCircle, Award, Search } from "lucide-react";
 import { EnrollmentStatus } from "@/types";
 
 interface StudentCourse {
@@ -30,23 +30,44 @@ interface StudentCourse {
 export default function StudentCoursesPage() {
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EnrollmentStatus | "ALL">("ALL");
 
   useEffect(() => {
     fetch("/api/student/courses")
-      .then(r => r.json())
-      .then(d => { setCourses(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load courses");
+        return r.json();
+      })
+      .then((data) => {
+        setCourses(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
   }, []);
 
-  const filtered = courses.filter(c => {
+  const filtered = courses.filter((c) => {
     const ms = c.course.title.toLowerCase().includes(search.toLowerCase()) || (c.course.doctorName?.toLowerCase().includes(search.toLowerCase()) ?? false);
     const mf = statusFilter === "ALL" || c.status === statusFilter;
     return ms && mf;
   });
 
   if (loading) return <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />;
+
+  if (error) {
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-red-500 text-sm mb-2">{error}</p>
+        <p className="text-charcoal-muted text-xs">
+          If you are seeing this, your account might not have an academic year assigned. Please log out and register again, or contact support.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <div>
@@ -62,13 +83,13 @@ export default function StudentCoursesPage() {
             type="text"
             placeholder="Search courses..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
           />
         </div>
         <select
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as EnrollmentStatus | "ALL")}
+          onChange={(e) => setStatusFilter(e.target.value as EnrollmentStatus | "ALL")}
           className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
         >
           <option value="ALL">All</option>
@@ -84,11 +105,11 @@ export default function StudentCoursesPage() {
           title="No courses found"
           description={search || statusFilter !== "ALL" ? "Try adjusting your filters." : "Browse our catalog to enroll in a course."}
           actionLabel={search || statusFilter !== "ALL" ? undefined : "Browse Courses"}
-          onAction={search || statusFilter !== "ALL" ? undefined : () => window.location.href = "/courses"}
+          onAction={search || statusFilter !== "ALL" ? undefined : () => (window.location.href = "/courses")}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map(c => (
+          {filtered.map((c) => (
             <Card key={c.enrollmentId} className="overflow-hidden p-0 flex flex-col">
               <div className={`h-32 ${c.course.thumbnailColor || "bg-vena-500"} relative flex items-center justify-center`}>
                 <BookOpen className="text-white/80" size={28} />
@@ -104,7 +125,7 @@ export default function StudentCoursesPage() {
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="text-lg font-semibold text-charcoal">{c.course.title}</h3>
                 <p className="text-sm text-charcoal-muted mt-1">{c.course.doctorName}</p>
-                <p className="text-xs text-charcoal-muted mt-1">{c.course.level} · {c.course.language}</p>
+                <p className="text-xs text-charcoal-muted mt-1">{c.course.level} • {c.course.language}</p>
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-1">
@@ -126,7 +147,9 @@ export default function StudentCoursesPage() {
                       Review Course
                     </Button>
                   ) : (
-                    <div className="text-center text-xs text-charcoal-muted py-2">Awaiting activation</div>
+                    <div className="text-center text-xs text-charcoal-muted py-2">
+                      Awaiting activation
+                    </div>
                   )}
                 </div>
               </div>
