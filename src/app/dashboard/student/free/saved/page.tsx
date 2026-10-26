@@ -47,7 +47,7 @@ export default async function SavedResourcesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-charcoal">Saved Resources</h1>
         <p className="text-charcoal-muted mt-1">
-          Free VENA resources you've bookmarked for later.
+          Free VENA resources you&apos;ve bookmarked for later.
         </p>
       </div>
 

@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
     <Card className="p-8">
       <h2 className="text-2xl font-bold text-charcoal mb-2">Forgot Password</h2>
       <p className="text-charcoal-muted mb-6">
-        Enter your email and we'll send you a link to reset your password.
+        Enter your email and we&apos;ll send you a link to reset your password.
       </p>
 
       {sent ? (
@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
           <CheckCircle className="mx-auto text-vena-500 mb-3" size={48} />
           <h3 className="text-lg font-semibold text-charcoal">Check your email</h3>
           <p className="text-sm text-charcoal-muted mt-2 max-w-sm mx-auto">
-            If an account with that email exists, we've sent a password reset link.
+            If an account with that email exists, we&apos;ve sent a password reset link.
             The link will expire in 1 hour.
           </p>
           <div className="mt-6">

@@ -142,7 +142,7 @@ export default async function DoctorProfilePage({
               size={40}
             />
             <p className="text-charcoal-muted">
-              This doctor hasn't published any courses yet.
+              This doctor hasn&apos;t published any courses yet.
             </p>
           </Card>
         ) : (

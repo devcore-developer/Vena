@@ -29,7 +29,7 @@ export default async function SavedResourcesPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <h1 className="text-3xl font-bold text-charcoal mb-2">Saved Resources</h1>
-      <p className="text-charcoal-muted mb-8">Free VENA resources you've bookmarked.</p>
+      <p className="text-charcoal-muted mb-8">Free VENA resources you&apos;ve bookmarked.</p>
 
       {resources.length === 0 ? (
         <EmptyState icon={Bookmark} title="No saved resources" description="Browse Free VENA and bookmark resources to find them here." />

@@ -268,7 +268,7 @@ export default function AdminSettingsPage() {
         <Card className="bg-amber-50 border-amber-200">
           <div className="flex items-center gap-2 text-amber-700 text-sm">
             <CheckCircle size={16} />
-            <span>Some enabled payment methods have no destination account configured. Students won't know where to send payments.</span>
+            <span>Some enabled payment methods have no destination account configured. Students won&apos;t know where to send payments.</span>
           </div>
         </Card>
       )}
