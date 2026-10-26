@@ -1,7 +1,18 @@
 export type Role = "SUPER_ADMIN" | "DOCTOR" | "SECRETARY" | "STUDENT";
 export type UserStatus = "ACTIVE" | "SUSPENDED" | "PENDING";
-export type Permission = "VIEW_STUDENTS" | "MANAGE_STUDENTS" | "VIEW_COURSES" | "MANAGE_COURSES" | "VIEW_EXAMS" | "MANAGE_EXAMS" | "VIEW_SUBMISSIONS" | "MANAGE_SUBMISSIONS";
-export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type Permission = 
+  | "VIEW_STUDENTS" 
+  | "MANAGE_STUDENTS" 
+  | "VIEW_COURSES" 
+  | "MANAGE_COURSES" 
+  | "VIEW_EXAMS" 
+  | "MANAGE_EXAMS" 
+  | "VIEW_SUBMISSIONS" 
+  | "MANAGE_SUBMISSIONS"
+  | "VIEW_MESSAGES"
+  | "MANAGE_MESSAGES"
+  | "VIEW_SUPPORT"
+  | "MANAGE_SUPPORT";export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type ExamType = "COURSE_EXAM" | "PRACTICE_EXAM" | "PREVIOUS_EXAM";
 export type ExamStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "ESSAY";

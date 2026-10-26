@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FileText, Plus, Users } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { ExamStatus } from "@/types";
 
 interface DoctorExam {
@@ -41,7 +41,9 @@ export default function DoctorExamsPage() {
           <h1 className="text-2xl font-bold text-charcoal">Exams</h1>
           <p className="text-charcoal-muted mt-1">Manage your course exams.</p>
         </div>
-        <Button><Plus className="mr-2 h-4 w-4" /> New Exam</Button>
+        <Button href="/dashboard/doctor/exams/new">
+          <Plus className="mr-2 h-4 w-4" /> New Exam
+        </Button>
       </div>
 
       {exams.length === 0 ? (
@@ -67,7 +69,9 @@ export default function DoctorExamsPage() {
               </div>
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-vena-50">
                 <span className="text-xs text-charcoal-muted">{formatDate(exam.createdAt)}</span>
-                <Button variant="secondary" size="sm">Manage</Button>
+                <Button href={`/dashboard/doctor/exams/${exam.id}`} variant="secondary" size="sm">
+                  Manage
+                </Button>
               </div>
             </Card>
           ))}
