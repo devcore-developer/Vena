@@ -53,6 +53,7 @@ export async function GET(req: Request) {
     level: c.level,
     language: c.language,
     estimatedDuration: c.estimatedDuration,
+    targetYear: c.targetYear || undefined,
     rating: c.rating?.toNumber(),
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -105,6 +106,7 @@ export async function POST(req: Request) {
         level: body.level || "BEGINNER",
         language: body.language || "ENGLISH",
         estimatedDuration: parseInt(body.estimatedDuration) || 0,
+        targetYear: body.targetYear || "YEAR_1",
       },
     });
 
@@ -117,6 +119,7 @@ export async function POST(req: Request) {
       status: newCourse.status,
       price: newCourse.price.toNumber(),
       isFree: newCourse.price.toNumber() === 0,
+      targetYear: newCourse.targetYear,
       createdAt: newCourse.createdAt.toISOString(),
       updatedAt: newCourse.updatedAt.toISOString(),
     });

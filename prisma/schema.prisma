@@ -194,6 +194,14 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum AcademicYear {
+  YEAR_1
+  YEAR_2
+  YEAR_3
+  YEAR_4
+  YEAR_5
+}
+
 // ============================================================
 // IDENTITY AND ACCESS
 // ============================================================
@@ -236,6 +244,7 @@ model User {
   auditLogs           AuditLog[]
   passwordResetTokens PasswordResetToken[]
   secretaryInvitesSent SecretaryInvitation[] @relation("InvitationSender")
+  academicYear AcademicYear? // For STUDENT role
 
   @@index([role])
   @@index([status])
@@ -338,6 +347,7 @@ model Course {
   publishedAt       DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+  targetYear        AcademicYear?
 
   sections         CourseSection[]
   enrollments      Enrollment[]

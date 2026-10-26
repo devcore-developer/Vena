@@ -15,6 +15,14 @@ interface Category {
   slug: string;
 }
 
+const ACADEMIC_YEARS = [
+  { value: "YEAR_1", label: "First Year" },
+  { value: "YEAR_2", label: "Second Year" },
+  { value: "YEAR_3", label: "Third Year" },
+  { value: "YEAR_4", label: "Fourth Year" },
+  { value: "YEAR_5", label: "Fifth Year" },
+];
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -34,6 +42,7 @@ export default function DoctorCoursesPage() {
     price: "",
     level: "BEGINNER",
     language: "ENGLISH",
+    targetYear: "YEAR_1",
   });
 
   const fetchCourses = async () => {
@@ -48,7 +57,6 @@ export default function DoctorCoursesPage() {
   useEffect(() => {
     fetchCourses();
 
-    // Fetch categories
     fetch("/api/categories")
       .then((r) => r.json())
       .then((data) => setCategories(Array.isArray(data) ? data : []))
@@ -71,7 +79,7 @@ export default function DoctorCoursesPage() {
     });
     if (res.ok) {
       setShowCreate(false);
-      setForm({ title: "", shortDescription: "", categoryId: "", price: "", level: "BEGINNER", language: "ENGLISH" });
+      setForm({ title: "", shortDescription: "", categoryId: "", price: "", level: "BEGINNER", language: "ENGLISH", targetYear: "YEAR_1" });
       await fetchCourses();
     }
     setCreating(false);
@@ -137,6 +145,11 @@ export default function DoctorCoursesPage() {
                   <div className="absolute top-3 right-3">
                     <Badge variant={getStatusVariant(course.status)}>{course.status}</Badge>
                   </div>
+                  {(course as any).targetYear && (
+                    <div className="absolute top-3 left-3">
+                      <Badge variant="default">{(course as any).targetYear.replace("_", " ")}</Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                   <span className="text-xs font-medium text-vena-600 bg-vena-50 px-2 py-1 rounded inline-block w-fit">
@@ -239,6 +252,21 @@ export default function DoctorCoursesPage() {
               </select>
             </div>
           </div>
+          
+          {/* Target Academic Year */}
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-1">Target Academic Year</label>
+            <select
+              value={form.targetYear}
+              onChange={e => setForm({ ...form, targetYear: e.target.value })}
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
+            >
+              {ACADEMIC_YEARS.map(y => (
+                <option key={y.value} value={y.value}>{y.label}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button type="submit" className="flex-1" isLoading={creating}>Create Course</Button>

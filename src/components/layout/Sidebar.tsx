@@ -20,6 +20,7 @@ import {
   MessageSquare,
   MessageCircle,
   Activity,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 import { Role } from "@/types";
@@ -69,6 +70,7 @@ const navConfig: Record<Role, NavItem[]> = {
   STUDENT: [
     { name: "Overview", href: "/dashboard/student", icon: LayoutDashboard },
     { name: "My Courses", href: "/dashboard/student/courses", icon: BookOpen },
+    { name: "Course Catalog", href: "/courses", icon: Search },
     { name: "My Exams", href: "/dashboard/student/exams", icon: FileText },
     { name: "Payments", href: "/dashboard/student/payments", icon: CreditCard },
     { name: "Free VENA", href: "/free", icon: Gift },

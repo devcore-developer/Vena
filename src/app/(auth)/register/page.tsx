@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eye, EyeOff, User, Mail, Lock, GraduationCap, Stethoscope } from "lucide-react";
 
+const ACADEMIC_YEARS = [
+  { value: "YEAR_1", label: "First Year" },
+  { value: "YEAR_2", label: "Second Year" },
+  { value: "YEAR_3", label: "Third Year" },
+  { value: "YEAR_4", label: "Fourth Year" },
+  { value: "YEAR_5", label: "Fifth Year" },
+];
+
 export default function RegisterPage() {
   const [form, setForm] = useState({
     name: "",
@@ -14,6 +22,7 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
     role: "STUDENT" as "STUDENT" | "DOCTOR",
+    academicYear: "YEAR_1" as string,
   });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,7 +36,6 @@ export default function RegisterPage() {
     setError("");
     setInfo("");
 
-    // Client-side validation
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match");
       setLoading(false);
@@ -56,10 +64,7 @@ export default function RegisterPage() {
       }
 
       if (data.status === "PENDING") {
-        setInfo(
-          data.message ||
-            "Your doctor application has been submitted for review."
-        );
+        setInfo(data.message || "Your doctor application has been submitted for review.");
         setTimeout(() => router.push("/login"), 5000);
       } else {
         router.push(data.redirect || "/dashboard/student");
@@ -151,6 +156,23 @@ export default function RegisterPage() {
             />
           </div>
         </div>
+
+        {/* Academic Year (Students Only) */}
+        {form.role === "STUDENT" && (
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-1">Academic Year</label>
+            <select
+              required
+              value={form.academicYear}
+              onChange={(e) => setForm({ ...form, academicYear: e.target.value })}
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
+            >
+              {ACADEMIC_YEARS.map((y) => (
+                <option key={y.value} value={y.value}>{y.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-charcoal mb-1">Password</label>

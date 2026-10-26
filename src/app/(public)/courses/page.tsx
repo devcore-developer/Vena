@@ -7,10 +7,19 @@ import Link from "next/link";
 
 export const metadata = { title: "Courses" };
 
+const ACADEMIC_YEARS = [
+  { value: "ALL", label: "All Years" },
+  { value: "YEAR_1", label: "First Year" },
+  { value: "YEAR_2", label: "Second Year" },
+  { value: "YEAR_3", label: "Third Year" },
+  { value: "YEAR_4", label: "Fourth Year" },
+  { value: "YEAR_5", label: "Fifth Year" },
+];
+
 export default async function CoursesPage({
   searchParams,
 }: {
-  searchParams: { search?: string; category?: string };
+  searchParams: { search?: string; category?: string; year?: string };
 }) {
   let courses: any[] = [];
   let categories: any[] = [];
@@ -23,8 +32,11 @@ export default async function CoursesPage({
           ...(searchParams.search
             ? { title: { contains: searchParams.search, mode: "insensitive" } }
             : {}),
-          ...(searchParams.category
+          ...(searchParams.category && searchParams.category !== "all"
             ? { category: { slug: searchParams.category } }
+            : {}),
+          ...(searchParams.year && searchParams.year !== "ALL"
+            ? { targetYear: searchParams.year as any }
             : {}),
         },
         include: {
@@ -57,18 +69,31 @@ export default async function CoursesPage({
       <h1 className="text-3xl font-bold text-charcoal mb-2">Discover Courses</h1>
       <p className="text-charcoal-muted mb-8">Find the right course for your medical journey.</p>
 
-      {/* Categories Filter */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        <Link href="/courses">
-          <Badge variant={searchParams.category ? "default" : "info"}>All</Badge>
-        </Link>
-        {categories.map((cat) => (
-          <Link key={cat.id} href={`/courses?category=${cat.slug}`}>
-            <Badge variant={searchParams.category === cat.slug ? "info" : "default"}>
-              {cat.name}
-            </Badge>
-          </Link>
-        ))}
+      {/* Filters */}
+      <div className="flex flex-col gap-4 mb-8">
+        {/* Categories */}
+        <div className="flex flex-wrap gap-2">
+          <Link href="/courses"><Badge variant={searchParams.category ? "default" : "info"}>All Categories</Badge></Link>
+          {categories.map((cat) => (
+            <Link key={cat.id} href={`/courses?category=${cat.slug}${searchParams.year ? `&year=${searchParams.year}` : ""}`}>
+              <Badge variant={searchParams.category === cat.slug ? "info" : "default"}>{cat.name}</Badge>
+            </Link>
+          ))}
+        </div>
+        
+        {/* Academic Years */}
+        <div className="flex flex-wrap gap-2">
+          {ACADEMIC_YEARS.map((y) => (
+            <Link 
+              key={y.value} 
+              href={`/courses?year=${y.value}${searchParams.category ? `&category=${searchParams.category}` : ""}`}
+            >
+              <Badge variant={searchParams.year === y.value || (!searchParams.year && y.value === "ALL") ? "info" : "default"}>
+                {y.label}
+              </Badge>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -77,9 +102,16 @@ export default async function CoursesPage({
             <Card className="overflow-hidden p-0 h-full hover:shadow-hover transition-shadow cursor-pointer">
               <div className={`h-40 ${course.thumbnailColor || "bg-vena-500"}`}></div>
               <div className="p-6">
-                <span className="text-xs font-medium text-vena-600 bg-vena-50 px-2 py-1 rounded">
-                  {course.category?.name || "Uncategorized"}
-                </span>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-medium text-vena-600 bg-vena-50 px-2 py-1 rounded">
+                    {course.category?.name || "Uncategorized"}
+                  </span>
+                  {course.targetYear && (
+                    <span className="text-xs font-medium text-charcoal bg-slate-100 px-2 py-1 rounded">
+                      {course.targetYear.replace("_", " ")}
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-lg font-semibold text-charcoal mt-3">{course.title}</h3>
                 <p className="text-sm text-charcoal-muted mt-1">{course.doctor.name}</p>
                 <div className="flex items-center justify-between mt-4">
