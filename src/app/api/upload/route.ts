@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  storage,
   validateFile,
   ALLOWED_VIDEO_TYPES,
   MAX_VIDEO_SIZE,
@@ -9,6 +8,7 @@ import {
   ALLOWED_DOCUMENT_TYPES,
   MAX_DOCUMENT_SIZE,
 } from "@/lib/storage";
+import { uploadToR2, getPublicUrl } from "@/lib/r2";
 import { requireAdmin, requireDoctorAccess } from "@/lib/auth-utils";
 import type { Permission } from "@/types";
 
@@ -73,12 +73,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const result = await storage.upload(file, folder);
+    // استخدام R2 بدلاً من Local Storage
+    const ext = file.name.split(".").pop() || "bin";
+    const mediaId = crypto.randomUUID();
+    
+    // بناء الـ objectKey يدوياً عشان نقبل أي folder
+    const safeFolder = folder.replace(/[^a-zA-Z0-9-]/g, "");
+    const safeMediaId = mediaId.replace(/[^a-zA-Z0-9-]/g, "");
+    const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    const objectKey = `uploads/${safeFolder}/${safeMediaId}.${safeExt}`;
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const result = await uploadToR2(buffer, objectKey, file.type);
+    
+    // توليد رابط مؤقت لعرض الملف (لأن الـ Bucket خاص)
+    const publicUrl = await getPublicUrl(objectKey);
 
     return NextResponse.json({
-      url: result.url,
+      url: publicUrl,
       size: result.size,
-      type: result.type,
+      type: result.mimeType, // عدلنا هنا من type لـ mimeType
       originalName: file.name,
     });
   } catch (error) {

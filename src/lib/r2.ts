@@ -133,3 +133,7 @@ export function generateObjectKey(courseId: string, kind: "previews" | "lectures
 
   return `courses/${safeCourseId}/${kind}/${safeMediaId}.${safeExt}`;
 }
+// ضيف ده في آخر ملف r2.ts
+export async function getPublicUrl(objectKey: string): Promise<string> {
+  return await generatePresignedDownloadUrl(objectKey, 3600); // 1 hour
+}
