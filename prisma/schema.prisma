@@ -202,6 +202,19 @@ enum AcademicYear {
   YEAR_5
 }
 
+enum MediaKind {
+  PREVIEW
+  LECTURE
+}
+
+enum MediaStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+
 // ============================================================
 // IDENTITY AND ACCESS
 // ============================================================
@@ -245,7 +258,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   secretaryInvitesSent SecretaryInvitation[] @relation("InvitationSender")
   academicYear AcademicYear? // For STUDENT role
-
+  uploadedMedia      CourseMedia[]
+  verificationTokens VerificationToken[]
   @@index([role])
   @@index([status])
   @@index([email])
@@ -355,6 +369,7 @@ model Course {
   payments         Payment[]
   financialTx      FinancialTransaction[]
   conversations    DoctorConversation[]
+  media            CourseMedia[]
 
   @@index([doctorId])
   @@index([categoryId])
@@ -389,6 +404,7 @@ model CourseLesson {
   isPublished Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+  mediaId     String? // ID of the CourseMedia record if type is VIDEO
 
   lessonProgress LessonProgress[]
 
@@ -832,4 +848,46 @@ model Announcement {
 
   @@index([isActive])
   @@index([startAt, endAt])
+}
+
+model CourseMedia {
+  id             String      @id @default(cuid())
+  courseId       String
+  course         Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  kind           MediaKind
+  objectKey      String      @unique
+  originalName   String
+  mimeType       String
+  sizeBytes      BigInt
+  duration       Int?        // in seconds
+  status         MediaStatus @default(PENDING)
+  lectureOrder   Int?        // for LECTURE kind only
+  lectureTitle   String?     // for LECTURE kind only
+  uploadedById   String
+  uploadedBy     User        @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([courseId])
+  @@index([kind])
+  @@index([status])
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model StorageUsage {
+  id              String   @id @default(cuid())
+  totalBytes      BigInt   @default(0)
+  totalVideos     Int      @default(0)
+  updatedAt       DateTime @updatedAt
 }

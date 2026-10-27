@@ -35,7 +35,6 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   if (!course) notFound();
 
-  // Verify enrollment
   const enrollment = await prisma.enrollment.findUnique({
     where: {
       studentId_courseId: { studentId: session.userId, courseId: course.id },
@@ -46,7 +45,12 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
     redirect(`/courses/${course.slug}`);
   }
 
-  // Get lesson progress
+  // جيب اسم الطالب عشان نمرره للـ VideoPlayer يعمل بيه Watermark
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { name: true },
+  });
+
   const lessonIds = course.sections.flatMap((s: any) => s.lessons.map((l: any) => l.id));
   const progress = await prisma.lessonProgress.findMany({
     where: { studentId: session.userId, lessonId: { in: lessonIds } },
@@ -71,6 +75,7 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
         duration: l.duration,
         isPreview: l.isPreview,
         isCompleted: progressMap.get(l.id) || false,
+        mediaId: l.mediaId || undefined,
       })),
     })),
     enrollment: {
@@ -80,5 +85,5 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
     },
   };
 
-  return <LearnClientView course={serializedCourse} />;
+  return <LearnClientView course={serializedCourse} studentName={user?.name || "Student"} />;
 }

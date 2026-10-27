@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { CheckCircle, PlayCircle, FileText, Video, Lock } from "lucide-react";
+import { VideoPlayer } from "@/components/ui/VideoPlayer";
+import { CheckCircle, PlayCircle, FileText, Video } from "lucide-react";
 
 interface Lesson {
   id: string;
@@ -15,6 +16,7 @@ interface Lesson {
   duration?: number;
   isPreview: boolean;
   isCompleted: boolean;
+  mediaId?: string;
 }
 
 interface Section {
@@ -32,7 +34,8 @@ interface Course {
   enrollment: { id: string; status: string; progress: number };
 }
 
-export default function LearnClientView({ course }: { course: Course }) {
+// استخدمنا studentName كـ prop
+export default function LearnClientView({ course, studentName }: { course: Course; studentName: string }) {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(
     course.sections[0]?.lessons[0] || null
   );
@@ -84,11 +87,16 @@ export default function LearnClientView({ course }: { course: Course }) {
                 <Badge variant="info">{activeLesson.type}</Badge>
               </div>
 
-              {activeLesson.type === "VIDEO" && activeLesson.resourceUrl && (
+              {activeLesson.type === "VIDEO" && activeLesson.mediaId ? (
+                <div className="mb-4">
+                  {/* بنمرر اسم الطالب هنا */}
+                  <VideoPlayer mediaId={activeLesson.mediaId} studentName={studentName} />
+                </div>
+              ) : activeLesson.type === "VIDEO" && activeLesson.resourceUrl ? (
                 <div className="aspect-video bg-charcoal rounded-lg overflow-hidden mb-4">
                   <iframe src={activeLesson.resourceUrl} className="w-full h-full" allowFullScreen />
                 </div>
-              )}
+              ) : null}
 
               {activeLesson.type === "PDF" && activeLesson.resourceUrl && (
                 <a href={activeLesson.resourceUrl} target="_blank" rel="noopener noreferrer" className="block">

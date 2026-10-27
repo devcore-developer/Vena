@@ -34,6 +34,8 @@ export async function GET(
   }
 }
 
+// استبدل دالة POST بالكامل بده:
+
 export async function POST(
   req: Request,
   { params }: { params: { courseId: string } }
@@ -53,25 +55,6 @@ export async function POST(
 
     const body = await req.json();
 
-    // لو الدرس فيديو — اتأكد إن مفيش أكتر من 10 فيديوهات في الكورس
-    if (body.type === "VIDEO") {
-      const existingVideos = await prisma.courseLesson.count({
-        where: {
-          section: { courseId: params.courseId },
-          type: "VIDEO",
-        },
-      });
-
-      if (existingVideos >= MAX_VIDEOS_PER_COURSE) {
-        return NextResponse.json(
-          {
-            error: `Maximum video limit reached (${MAX_VIDEOS_PER_COURSE} videos per course). You can add PDF or TEXT lessons instead.`,
-          },
-          { status: 400 }
-        );
-      }
-    }
-
     const lastLesson = await prisma.courseLesson.findFirst({
       where: { sectionId: body.sectionId },
       orderBy: { order: "desc" },
@@ -89,6 +72,7 @@ export async function POST(
         order: (lastLesson?.order || 0) + 1,
         isPreview: body.isPreview || false,
         isPublished: body.isPublished !== false,
+        mediaId: body.mediaId || null, // ربط الفيديو المرفوع بالدرس
       },
     });
 

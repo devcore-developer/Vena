@@ -75,6 +75,7 @@ export async function getSession() {
 }
 
 // Full session check — JWT + DB (verifies user is still ACTIVE)
+// This enforces email verification globally: PENDING users are rejected.
 export async function getValidSession(): Promise<{
   userId: string;
   role: string;
@@ -88,6 +89,8 @@ export async function getValidSession(): Promise<{
       select: { id: true, role: true, status: true },
     });
 
+    // Only ACTIVE users can pass this check.
+    // PENDING (unverified email or unapproved doctor) are blocked.
     if (!user || user.status !== "ACTIVE") return null;
 
     return { userId: user.id, role: user.role };

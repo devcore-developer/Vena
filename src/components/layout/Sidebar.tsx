@@ -21,6 +21,7 @@ import {
   MessageCircle,
   Activity,
   Search,
+  HardDrive,
   type LucideIcon,
 } from "lucide-react";
 import { Role } from "@/types";
@@ -40,6 +41,7 @@ const navConfig: Record<Role, NavItem[]> = {
     { name: "Free VENA", href: "/dashboard/admin/free-vena", icon: Gift },
     { name: "Payments", href: "/dashboard/admin/payments", icon: CreditCard },
     { name: "Finance", href: "/dashboard/admin/finance", icon: DollarSign },
+    { name: "Storage", href: "/dashboard/admin/storage", icon: HardDrive },
     { name: "Support", href: "/dashboard/admin/support", icon: MessageSquare },
     { name: "Audit Logs", href: "/dashboard/admin/audit-logs", icon: FileText },
     { name: "Operations", href: "/dashboard/admin/operations", icon: Settings },

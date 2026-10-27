@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth";
 import { registerSchema } from "@/lib/schemas";
 import { checkRateLimit } from "@/lib/auth-utils";
+import { sendVerificationEmail } from "@/lib/email";
+import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
@@ -42,7 +44,9 @@ export async function POST(req: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const accountStatus = role === "DOCTOR" ? "PENDING" : "ACTIVE";
+
+    // Both students and doctors start as PENDING until email is verified
+    const accountStatus = "PENDING";
 
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -52,10 +56,9 @@ export async function POST(req: Request) {
           passwordHash,
           role,
           status: accountStatus,
-          // Persist academic year for students
           academicYear: role === "STUDENT" ? academicYear : null,
         },
-        select: { id: true, role: true, status: true },
+        select: { id: true, role: true, status: true, email: true, name: true },
       });
 
       if (role === "DOCTOR") {
@@ -76,26 +79,42 @@ export async function POST(req: Request) {
         data: { userId: user.id },
       });
 
-      return user;
+      // Create verification token
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await tx.verificationToken.create({
+        data: {
+          userId: user.id,
+          token,
+          expiresAt,
+        },
+      });
+
+      return { user, token };
     });
 
-    if (newUser.status === "ACTIVE") {
-      await createSession(newUser.id, newUser.role);
-      return NextResponse.json({
-        role: newUser.role,
-        status: newUser.status,
-        redirect: "/dashboard/student",
-      });
+    // Send verification email
+    try {
+      await sendVerificationEmail(newUser.user.email, newUser.token, name);
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError);
+      // Don't fail registration if email fails, but inform user
+      return NextResponse.json(
+        {
+          message: "Account created but verification email could not be sent. Please contact support.",
+          redirect: "/login",
+        },
+        { status: 202 }
+      );
     }
 
     return NextResponse.json(
       {
-        role: newUser.role,
-        status: newUser.status,
-        message: "Your doctor application has been submitted. An administrator will review it shortly.",
-        redirect: "/login",
+        message: "Account created! Please check your email to verify your account.",
+        redirect: "/login?check_email=true",
       },
-      { status: 202 }
+      { status: 201 }
     );
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2002") {
@@ -104,6 +123,7 @@ export async function POST(req: Request) {
         { status: 409 }
       );
     }
+    console.error("Registration error:", error);
     return NextResponse.json(
       { error: "Registration service unavailable" },
       { status: 503 }
