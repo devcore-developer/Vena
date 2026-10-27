@@ -1,8 +1,19 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
 
-const FROM_EMAIL = process.env.EMAIL_FROM || "noreply@vena.com";
+function getResendClient(): Resend {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY is not configured in environment variables.");
+    }
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
+
+const FROM_EMAIL = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
 export async function sendVerificationEmail(
   to: string,
@@ -12,6 +23,7 @@ export async function sendVerificationEmail(
   const verificationUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/auth/verify-email?token=${token}`;
 
   try {
+    const resend = getResendClient();
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
@@ -39,6 +51,7 @@ export async function sendPasswordResetEmail(
   const resetUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/reset-password?token=${token}`;
 
   try {
+    const resend = getResendClient();
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
