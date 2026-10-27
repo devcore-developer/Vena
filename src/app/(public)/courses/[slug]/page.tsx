@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { VideoPlayer } from "@/components/ui/VideoPlayer";
 import { Users, Clock, BookOpen, GraduationCap, Lock } from "lucide-react";
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
@@ -19,6 +20,8 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
   const session = await getValidSession();
 
   let course: any = null;
+  let previewMedia: any = null;
+
   try {
     course = await prisma.course.findUnique({
       where: { slug: params.slug, status: "PUBLISHED" },
@@ -29,6 +32,13 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
         _count: { select: { enrollments: true } },
       },
     });
+
+    if (course) {
+      previewMedia = await prisma.courseMedia.findFirst({
+        where: { courseId: course.id, kind: "PREVIEW", status: "READY" },
+        select: { id: true },
+      });
+    }
   } catch {
     // DB unavailable
   }
@@ -52,7 +62,6 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
 
     const studentYear = user?.academicYear;
 
-    // If student has no academic year, deny access entirely
     if (!studentYear) {
       return (
         <div className="max-w-3xl mx-auto px-4 py-12">
@@ -67,12 +76,10 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
       );
     }
 
-    // If the course has a target year and it doesn't match the student's year, deny access
     if (course.targetYear && course.targetYear !== studentYear) {
       yearMismatch = true;
     }
 
-    // Check enrollment status (only if year matches)
     if (!yearMismatch) {
       studentEnrollment = await prisma.enrollment.findUnique({
         where: {
@@ -85,9 +92,6 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
     }
   }
 
-  // ============================================================
-  // Year Mismatch View (Student trying to access another year's course)
-  // ============================================================
   if (yearMismatch) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12">
@@ -106,9 +110,6 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
     );
   }
 
-  // ============================================================
-  // Normal Course Detail View
-  // ============================================================
   const isEnrolled =
     isStudent &&
     studentEnrollment &&
@@ -118,6 +119,8 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
     isStudent &&
     studentEnrollment &&
     (studentEnrollment.status === "PENDING");
+
+  const isFree = course.price.toNumber() === 0;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -136,6 +139,13 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
           <h1 className="text-3xl font-bold text-charcoal mt-3">{course.title}</h1>
           <p className="text-charcoal-muted mt-2">By {course.doctor.name}</p>
           <p className="text-charcoal mt-6">{course.description}</p>
+
+          {previewMedia && (
+            <div className="mt-8">
+              <h2 className="text-xl font-bold text-charcoal mb-4">Course Preview</h2>
+              <VideoPlayer mediaId={previewMedia.id} />
+            </div>
+          )}
 
           <h2 className="text-xl font-bold text-charcoal mt-8 mb-4">Course Content</h2>
           <div className="space-y-3">
@@ -158,10 +168,9 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
         <div>
           <Card className="sticky top-24">
             <p className="text-3xl font-bold text-charcoal">
-              {course.price.toNumber() === 0 ? "Free" : `${course.price.toNumber()} EGP`}
+              {isFree ? "Free" : `${course.price.toNumber()} EGP`}
             </p>
 
-            {/* Enrollment / Action Buttons */}
             <div className="mt-4 space-y-2">
               {isEnrolled ? (
                 <Button href={`/learn/${course.slug}`} className="w-full">
@@ -178,7 +187,7 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
                 </>
               ) : isStudent ? (
                 <Button href={`/dashboard/student/checkout/${course.id}`} className="w-full">
-                  Enroll Now
+                  {isFree ? "Enroll for Free" : "Enroll Now"}
                 </Button>
               ) : (
                 <Button href="/login" variant="secondary" className="w-full">

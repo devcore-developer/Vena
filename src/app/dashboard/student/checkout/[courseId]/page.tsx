@@ -48,6 +48,7 @@ interface CourseInfo {
   isFree: boolean;
   thumbnailColor?: string;
   targetYear?: string;
+  slug?: string;
 }
 
 export default function CheckoutPage({ params }: { params: { courseId: string } }) {
@@ -63,6 +64,7 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [yearBlocked, setYearBlocked] = useState(false);
+  const [successFree, setSuccessFree] = useState(false);
 
   // Receipt state
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -70,20 +72,17 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   const [studentNote, setStudentNote] = useState("");
 
   useEffect(() => {
-    // Fetch student profile + payment config + course info in parallel
     Promise.all([
       fetch("/api/student/profile").then((r) => r.json()),
       fetch("/api/student/payment-config").then((r) => r.json()),
       fetch("/api/public/courses").then((r) => r.json()).catch(() => []),
     ])
       .then(([profile, payConfig, coursesData]) => {
-        // Setup payment config
         setPaymentConfig(payConfig);
         if (payConfig.methods?.length > 0) {
           setSelectedMethod(payConfig.methods[0]);
         }
 
-        // Find the course
         const courses = Array.isArray(coursesData) ? coursesData : coursesData.data || [];
         const c = courses.find((item: any) => item.id === params.courseId);
 
@@ -93,7 +92,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
           return;
         }
 
-        // Academic Year Verification
         if (profile.academicYear && c.targetYear && profile.academicYear !== c.targetYear) {
           setYearBlocked(true);
           setLoading(false);
@@ -105,9 +103,10 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
           title: c.title,
           doctorName: c.doctorName,
           price: c.price,
-          isFree: c.isFree,
+          isFree: c.price === 0 || c.isFree,
           thumbnailColor: c.thumbnailColor,
           targetYear: c.targetYear,
+          slug: c.slug,
         });
 
         setLoading(false);
@@ -118,41 +117,50 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
       });
   }, [params.courseId]);
 
+  const handleFreeEnroll = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/student/enroll/free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: params.courseId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to enroll");
+      setSuccessFree(true);
+      setTimeout(() => router.push(`/learn/${course?.slug}`), 1500);
+    } catch (e: any) {
+      setError(e.message || "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCreatePayment = async () => {
     setSubmitting(true);
     setError("");
-
     try {
       const res = await fetch("/api/student/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseId: params.courseId,
-          method: selectedMethod,
-        }),
+        body: JSON.stringify({ courseId: params.courseId, method: selectedMethod }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Failed to initiate payment");
-        setSubmitting(false);
-        return;
-      }
-
+      if (!res.ok) throw new Error(data.error || "Failed to initiate payment");
       setPayment(data);
       setStep(2);
-    } catch {
-      setError("Something went wrong");
+    } catch (e: any) {
+      setError(e.message || "Something went wrong");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   const handleUploadReceipt = async () => {
     if (!payment || !receiptFile) return;
     setSubmitting(true);
     setError("");
-
     try {
       const formData = new FormData();
       formData.append("receipt", receiptFile);
@@ -163,20 +171,14 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
         method: "POST",
         body: formData,
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Failed to upload receipt");
-        setSubmitting(false);
-        return;
-      }
-
+      if (!res.ok) throw new Error(data.error || "Failed to upload receipt");
       router.push("/dashboard/student/payments");
-    } catch {
-      setError("Failed to upload receipt");
+    } catch (e: any) {
+      setError(e.message || "Failed to upload receipt");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   if (loading) {
@@ -187,14 +189,13 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
     );
   }
 
-  // Year Mismatch Block Screen
   if (yearBlocked) {
     return (
       <Card className="p-8 text-center max-w-md mx-auto">
         <Lock className="mx-auto text-red-500 mb-4" size={48} />
         <h2 className="text-xl font-bold text-charcoal">Course Not Available</h2>
         <p className="text-charcoal-muted mt-2 text-sm">
-          This course is assigned to a different academic year than the one registered on your account. You can only enroll in courses for your current academic year.
+          This course is assigned to a different academic year than the one registered on your account.
         </p>
         <Button href="/courses" variant="secondary" size="sm" className="mt-4">
           Back to Courses
@@ -203,7 +204,19 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
     );
   }
 
-  if (error && !payment) {
+  if (successFree) {
+    return (
+      <Card className="p-8 text-center max-w-md mx-auto">
+        <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
+        <h2 className="text-xl font-bold text-charcoal">Enrollment Successful!</h2>
+        <p className="text-charcoal-muted mt-2 text-sm">
+          You now have access to this course. Redirecting...
+        </p>
+      </Card>
+    );
+  }
+
+  if (error && !payment && !course?.isFree) {
     return (
       <Card className="p-8 text-center max-w-md mx-auto">
         <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
@@ -217,7 +230,49 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   }
 
   // ============================================================
-  // STEP 2: Payment Instructions + Receipt Upload
+  // FREE COURSE CHECKOUT
+  // ============================================================
+  if (course?.isFree) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-bold text-charcoal mb-6">Checkout</h1>
+        <Card className="mb-6">
+          <div className="flex items-center gap-4">
+            <div className={`h-16 w-16 rounded-lg ${course.thumbnailColor || "bg-vena-500"} flex items-center justify-center flex-shrink-0`}>
+              <BookOpen className="text-white/80" size={24} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-charcoal">{course.title}</h2>
+              <p className="text-sm text-charcoal-muted">{course.doctorName}</p>
+            </div>
+            <div className="text-right">
+              <Badge variant="success">FREE</Badge>
+            </div>
+          </div>
+        </Card>
+        
+        <Card>
+          <div className="text-center py-6">
+            <h3 className="font-semibold text-charcoal mb-2">Free Course Enrollment</h3>
+            <p className="text-sm text-charcoal-muted mb-6">
+              Click the button below to get instant access to this course.
+            </p>
+            {error && (
+              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100 mb-4">
+                {error}
+              </div>
+            )}
+            <Button onClick={handleFreeEnroll} isLoading={submitting} size="lg">
+              Enroll for Free <ArrowRight size={16} className="ml-2" />
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // STEP 2: Payment Instructions + Receipt Upload (PAID COURSES)
   // ============================================================
   if (step === 2 && payment) {
     const snapshot = payment.paymentConfigSnapshot;
@@ -228,7 +283,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
           Transfer the exact amount to the account below, then upload your receipt.
         </p>
 
-        {/* Course Summary */}
         {course && (
           <Card className="mb-6">
             <div className="flex items-center gap-4">
@@ -241,14 +295,13 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-charcoal">
-                  {course.isFree ? "Free" : `${course.price} EGP`}
+                  {course.price} EGP
                 </p>
               </div>
             </div>
           </Card>
         )}
 
-        {/* Payment Instructions */}
         <Card className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-charcoal">Payment Details</h2>
@@ -294,7 +347,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
           </div>
         </Card>
 
-        {/* Receipt Upload */}
         <Card>
           <h2 className="font-semibold text-charcoal mb-4">Upload Payment Receipt</h2>
 
@@ -383,13 +435,12 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   }
 
   // ============================================================
-  // STEP 1: Method Selection
+  // STEP 1: Method Selection (PAID COURSES)
   // ============================================================
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-charcoal mb-6">Checkout</h1>
 
-      {/* Course Summary */}
       {course && (
         <Card className="mb-6">
           <div className="flex items-center gap-4">
@@ -402,7 +453,7 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-charcoal">
-                {course.isFree ? "Free" : `${course.price} EGP`}
+                {course.price} EGP
               </p>
             </div>
           </div>
@@ -452,6 +503,12 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
             <p className="font-mono text-charcoal text-sm">
               {paymentConfig.config[selectedMethod as "INSTAPAY" | "VODAFONE_CASH"]?.account || "Not configured"}
             </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100 mb-4">
+            {error}
           </div>
         )}
 
