@@ -25,17 +25,19 @@ const roleDashboard: Record<string, string> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /dashboard routes
+  // Only protect /dashboard routes (including /dashboard itself)
   if (!pathname.startsWith("/dashboard")) {
     return NextResponse.next();
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
 
+  // No token → redirect to login
   if (!token) {
     return redirectToLogin(request, pathname);
   }
 
+  // Verify JWT (Edge-compatible — no Prisma)
   let role: string | null = null;
   try {
     const secret = process.env.AUTH_SECRET;
@@ -53,6 +55,12 @@ export async function middleware(request: NextRequest) {
 
   if (!role) {
     return redirectToLogin(request, pathname);
+  }
+
+  // Handle /dashboard (no subpath) — redirect to role-specific dashboard
+  if (pathname === "/dashboard" || pathname === "/dashboard/") {
+    const dest = roleDashboard[role] || "/dashboard";
+    return NextResponse.redirect(new URL(dest, request.url));
   }
 
   // Role-based route protection
@@ -86,6 +94,7 @@ function redirectToDashboard(request: NextRequest, role: string) {
   return NextResponse.redirect(new URL(dest, request.url));
 }
 
+// Updated matcher to catch /dashboard itself AND all subpaths
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard", "/dashboard/:path*"],
 };
