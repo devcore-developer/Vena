@@ -19,12 +19,18 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   let course: any = null;
   try {
+// استبدل جزء الـ include بتاع الـ sections بده:
     course = await prisma.course.findUnique({
       where: { slug: params.courseSlug, status: "PUBLISHED" },
       include: {
         doctor: { select: { name: true } },
         sections: {
           include: { lessons: { orderBy: { order: "asc" } } },
+          orderBy: { order: "asc" },
+        },
+        // نجيب الدروس اللي مفيهاش قسم
+        CourseLessons: {
+          where: { sectionId: null },
           orderBy: { order: "asc" },
         },
       },

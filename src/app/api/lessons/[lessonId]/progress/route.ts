@@ -20,7 +20,6 @@ export async function POST(
       );
     }
 
-    // 1. Get lesson with section → course
     const lesson = await prisma.courseLesson.findUnique({
       where: { id: params.lessonId },
       include: {
@@ -34,9 +33,16 @@ export async function POST(
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 
-    const courseId = lesson.section.courseId;
+    // استخدام courseId المباشر لو موجود، أو من خلال الـ section
+    const courseId = lesson.courseId || lesson.section?.courseId;
 
-    // 2. Verify student has active enrollment
+    if (!courseId) {
+      return NextResponse.json(
+        { error: "Could not determine course for this lesson" },
+        { status: 400 }
+      );
+    }
+
     const enrollment = await prisma.enrollment.findUnique({
       where: {
         studentId_courseId: {
@@ -53,7 +59,6 @@ export async function POST(
       );
     }
 
-    // 3. Upsert lesson progress
     await prisma.lessonProgress.upsert({
       where: {
         studentId_lessonId: {
@@ -73,13 +78,11 @@ export async function POST(
       },
     });
 
-    // 4. Recalculate course progress
     const progress = await calculateCourseProgress(
       auth.session.userId,
       courseId
     );
 
-    // 5. Update enrollment progress
     await prisma.enrollment.update({
       where: { id: enrollment.id },
       data: {

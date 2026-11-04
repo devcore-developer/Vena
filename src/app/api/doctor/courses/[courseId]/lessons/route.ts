@@ -63,7 +63,8 @@ export async function POST(
 
     const lesson = await prisma.courseLesson.create({
       data: {
-        sectionId: body.sectionId,
+        sectionId: body.sectionId || null,
+        courseId: params.courseId, // أضفنا السطر ده
         title: body.title,
         type: body.type || "VIDEO",
         content: body.content || null,
@@ -72,7 +73,7 @@ export async function POST(
         order: (lastLesson?.order || 0) + 1,
         isPreview: body.isPreview || false,
         isPublished: body.isPublished !== false,
-        mediaId: body.mediaId || null, // ربط الفيديو المرفوع بالدرس
+        mediaId: body.mediaId || null,
       },
     });
 

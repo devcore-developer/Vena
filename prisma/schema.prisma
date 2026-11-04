@@ -362,7 +362,7 @@ model Course {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   targetYear        AcademicYear?
-
+  lessons          CourseLesson[]
   sections         CourseSection[]
   enrollments      Enrollment[]
   exams            Exam[]
@@ -393,10 +393,12 @@ model CourseLesson {
   id          String           @id @default(cuid())
   sectionId   String?
   section     CourseSection?   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  courseId    String?
+  course      Course?          @relation(fields: [courseId], references: [id])
   title       String
-  description String?           @db.Text
+  description String?          @db.Text
   type        LessonType
-  content     String?           @db.Text
+  content     String?          @db.Text
   resourceUrl String?
   duration    Int?
   order       Int              @default(0)
@@ -404,11 +406,11 @@ model CourseLesson {
   isPublished Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
-  mediaId     String? // ID of the CourseMedia record if type is VIDEO
 
   lessonProgress LessonProgress[]
 
   @@index([sectionId])
+  @@index([courseId])
   @@index([isPublished])
 }
 
