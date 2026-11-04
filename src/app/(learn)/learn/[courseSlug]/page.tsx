@@ -28,8 +28,7 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
           include: { lessons: { orderBy: { order: "asc" } } },
           orderBy: { order: "asc" },
         },
-        // نجيب الدروس اللي مفيهاش قسم
-        CourseLessons: {
+        lessons: { // غيّر CourseLessons لـ lessons
           where: { sectionId: null },
           orderBy: { order: "asc" },
         },

@@ -37,7 +37,7 @@ export async function GET() {
         id: true,
         title: true,
         status: true,
-        sections: {
+        sections: { // أضف السطر ده
           select: {
             id: true,
             lessons: {
@@ -52,9 +52,15 @@ export async function GET() {
             },
           },
         },
+        CourseLessons: { // أضف السطر ده عشان الدروس المستقلة
+          where: { sectionId: null },
+          select: {
+            id: true, title: true, type: true, content: true, resourceUrl: true, mediaId: true,
+          },
+        },
       },
     });
-
+    
     // 3. Calculate checklist items
     const checklist = {
       profileComplete: false,

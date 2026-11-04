@@ -52,8 +52,8 @@ export default async function CourseManagementPage({
   const course = await prisma.course.findUnique({
     where: { id: params.courseId },
     include: {
-      category: { select: { name: true } },
-      sections: {
+      category: { select: { name: true } }, // تأكد إنها موجودة
+      sections: { // تأكد إنها موجودة
         include: {
           lessons: {
             select: {
