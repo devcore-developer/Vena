@@ -48,8 +48,13 @@ export async function POST(req: Request) {
 
     try {
       await sendVerificationEmail(normalizedEmail, token, user.name);
-    } catch (e) {
-      // silent
+    } catch (e: any) {
+      console.error("[Resend Verification Error]", e);
+      // Don't tell the user the exact error, but log it
+      return NextResponse.json(
+        { error: "Failed to send email. Please check server configuration." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

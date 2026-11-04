@@ -2,9 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-// ============================================================
-// SECRET MANAGEMENT — no insecure fallback
-// ============================================================
+const EMAIL_VERIFICATION_REQUIRED = process.env.EMAIL_VERIFICATION_REQUIRED === "true";
 
 function getEncodedKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
@@ -15,10 +13,6 @@ function getEncodedKey(): Uint8Array {
   }
   return new TextEncoder().encode(secret);
 }
-
-// ============================================================
-// JWT ENCRYPT/DECRYPT
-// ============================================================
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)
@@ -39,10 +33,6 @@ export async function decrypt(session: string | undefined = "") {
   }
 }
 
-// ============================================================
-// SESSION MANAGEMENT (Server Components / Route Handlers)
-// ============================================================
-
 export async function createSession(userId: string, role: string) {
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session = await encrypt({ userId, role, expires });
@@ -59,7 +49,6 @@ export function logout() {
   cookies().set("vena-session", "", { expires: new Date(0) });
 }
 
-// Lightweight session check — JWT only, no DB
 export async function getSession() {
   const session = cookies().get("vena-session")?.value;
   if (!session) return null;
@@ -74,8 +63,6 @@ export async function getSession() {
   }
 }
 
-// Full session check — JWT + DB (verifies user is still ACTIVE)
-// This enforces email verification globally: PENDING users are rejected.
 export async function getValidSession(): Promise<{
   userId: string;
   role: string;
@@ -89,20 +76,20 @@ export async function getValidSession(): Promise<{
       select: { id: true, role: true, status: true },
     });
 
-    // Only ACTIVE users can pass this check.
-    // PENDING (unverified email or unapproved doctor) are blocked.
-    if (!user || user.status !== "ACTIVE") return null;
+    if (!user) return null;
+
+    // Allow ACTIVE users. 
+    // If verification is disabled, allow PENDING users as well.
+    // Always block SUSPENDED users.
+    const isAllowed = user.status === "ACTIVE" || (!EMAIL_VERIFICATION_REQUIRED && user.status === "PENDING");
+    
+    if (!isAllowed) return null;
 
     return { userId: user.id, role: user.role };
   } catch {
-    // Database unavailable — fail safe
     return null;
   }
 }
-
-// ============================================================
-// MIDDLEWARE SUPPORT (Edge-compatible — no Prisma)
-// ============================================================
 
 export async function verifySessionToken(
   token: string

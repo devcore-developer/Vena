@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -13,12 +13,16 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
+  const [resending, setResending] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setNeedsVerification(false);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -31,11 +35,13 @@ export default function LoginPage() {
 
       if (!res.ok) {
         setError(data.error || "Invalid email or password");
+        if (data.needsVerification) {
+          setNeedsVerification(true);
+        }
         setLoading(false);
         return;
       }
 
-      // Redirect based on role
       if (data.role === "SUPER_ADMIN") router.push("/dashboard/admin");
       else if (data.role === "DOCTOR" || data.role === "SECRETARY") router.push("/dashboard/doctor");
       else router.push("/dashboard/student");
@@ -45,14 +51,47 @@ export default function LoginPage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    setResending(true);
+    setResendStatus("");
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      setResendStatus(data.message || "Failed to resend email.");
+    } catch {
+      setResendStatus("Failed to resend email.");
+    }
+    setResending(false);
+  };
+
   return (
     <Card className="p-8">
       <h2 className="text-2xl font-bold text-charcoal mb-2">Welcome back</h2>
       <p className="text-charcoal-muted mb-6">Enter your credentials to access your account</p>
 
       {error && (
-        <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4 border border-red-100">
-          {error}
+        <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4 border border-red-100 flex flex-col gap-2">
+          <span>{error}</span>
+          {needsVerification && (
+            <button
+              onClick={handleResendVerification}
+              disabled={resending}
+              className="text-vena-600 hover:underline font-medium text-xs text-left flex items-center gap-1"
+            >
+              {resending ? <Loader2 size={12} className="animate-spin" /> : null}
+              Click here to resend verification email
+            </button>
+          )}
+        </div>
+      )}
+
+      {resendStatus && (
+        <div className="bg-vena-50 text-vena-700 text-sm p-3 rounded-lg mb-4 border border-vena-100">
+          {resendStatus}
         </div>
       )}
 

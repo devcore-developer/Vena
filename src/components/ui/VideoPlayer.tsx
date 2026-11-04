@@ -1,32 +1,45 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 
 interface VideoPlayerProps {
   mediaId: string;
-  poster?: string;
-  studentName?: string; // عشان نعمل بيها Watermark
+  studentName?: string;
 }
 
-export function VideoPlayer({ mediaId, poster, studentName }: VideoPlayerProps) {
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [playbackType, setPlaybackType] = useState<"expirable" | "iframe" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchUrl = async () => {
       try {
-        const res = await fetch(`/api/media/${mediaId}/playback`);
+        // Try StreamVault secure playback first
+        const res = await fetch(`/api/media/${mediaId}/streamvault-playback`);
         if (!res.ok) {
+          // Fall back to R2 playback
+          const r2Res = await fetch(`/api/media/${mediaId}/playback`);
+          if (!r2Res.ok) {
+            const data = await r2Res.json();
+            throw new Error(data.error || "Failed to load video");
+          }
+          const r2Data = await r2Res.json();
+          if (isMounted) {
+            setPlaybackUrl(r2Data.url);
+            setPlaybackType("expirable");
+          }
+        } else {
           const data = await res.json();
-          throw new Error(data.error || "Failed to load video");
+          if (isMounted) {
+            setPlaybackUrl(data.url);
+            setPlaybackType(data.type);
+          }
         }
-        const data = await res.json();
-        if (isMounted) setVideoUrl(data.url);
       } catch (e: any) {
         if (isMounted) setError(e.message);
       } finally {
@@ -36,34 +49,8 @@ export function VideoPlayer({ mediaId, poster, studentName }: VideoPlayerProps) 
 
     fetchUrl();
 
-    // ============================================================
-    // 1. منع الـ Right-click على الصفحة كلها أثناء المشاهدة
-    // ============================================================
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-    document.addEventListener("contextmenu", handleContextMenu);
-
-    // ============================================================
-    // 2. منع اختصارات الكيبورد (DevTools, Save, Copy)
-    // ============================================================
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // منع F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+S
-      if (
-        e.key === "F12" ||
-        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C")) ||
-        (e.ctrlKey && (e.key === "u" || e.key === "s" || e.key === "c"))
-      ) {
-        e.preventDefault();
-        return false;
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-
     return () => {
       isMounted = false;
-      document.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [mediaId]);
 
@@ -84,26 +71,34 @@ export function VideoPlayer({ mediaId, poster, studentName }: VideoPlayerProps) 
     );
   }
 
-  if (!videoUrl) return null;
+  if (!playbackUrl) return null;
 
+  // StreamVault iframe embed (DRM-protected)
+  if (playbackType === "iframe") {
+    return (
+      <div className="aspect-video bg-black rounded-lg overflow-hidden">
+        <iframe
+          src={playbackUrl}
+          className="w-full h-full"
+          allowFullScreen
+          allow="encrypted-media; fullscreen; picture-in-picture"
+          style={{ border: "0" }}
+        />
+      </div>
+    );
+  }
+
+  // Direct video URL (R2 or expirable StreamVault link)
   return (
-    <div className="relative aspect-video bg-black rounded-lg overflow-hidden group">
-      
-      {/* Video Element */}
+    <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
       <video
-        ref={videoRef}
-        src={videoUrl}
-        poster={poster}
+        src={playbackUrl}
         controls
         controlsList="nodownload noremoteplayback noplaybackrate"
         disablePictureInPicture
         className="w-full h-full"
         onContextMenu={(e) => e.preventDefault()}
       />
-
-      {/* ============================================================ */}
-      {/* 3. Watermark باسم الطالب (بيتحرك ويكرر نفسه على الشاشة)       */}
-      {/* ============================================================ */}
       {studentName && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/4 left-1/4 transform -rotate-12 opacity-30 text-white text-2xl font-bold whitespace-nowrap animate-pulse">

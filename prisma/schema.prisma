@@ -856,13 +856,14 @@ model CourseMedia {
   course         Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
   kind           MediaKind
   objectKey      String      @unique
+  streamvaultId  String?     // StreamVault video ID for protected playback
   originalName   String
   mimeType       String
   sizeBytes      BigInt
-  duration       Int?        // in seconds
+  duration       Int?
   status         MediaStatus @default(PENDING)
-  lectureOrder   Int?        // for LECTURE kind only
-  lectureTitle   String?     // for LECTURE kind only
+  lectureOrder   Int?
+  lectureTitle   String?
   uploadedById   String
   uploadedBy     User        @relation(fields: [uploadedById], references: [id])
   createdAt      DateTime    @default(now())
@@ -871,6 +872,7 @@ model CourseMedia {
   @@index([courseId])
   @@index([kind])
   @@index([status])
+  @@index([streamvaultId])
 }
 
 model VerificationToken {

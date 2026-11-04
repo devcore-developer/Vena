@@ -7,6 +7,8 @@ import { checkRateLimit } from "@/lib/auth-utils";
 import { sendVerificationEmail } from "@/lib/email";
 import crypto from "crypto";
 
+const EMAIL_VERIFICATION_REQUIRED = process.env.EMAIL_VERIFICATION_REQUIRED === "true";
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
@@ -45,8 +47,8 @@ export async function POST(req: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Both students and doctors start as PENDING until email is verified
-    const accountStatus = "PENDING";
+    // If email verification is disabled, accounts are active immediately.
+    const accountStatus = EMAIL_VERIFICATION_REQUIRED ? "PENDING" : "ACTIVE";
 
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -79,43 +81,59 @@ export async function POST(req: Request) {
         data: { userId: user.id },
       });
 
-      // Create verification token
-      const token = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      if (EMAIL_VERIFICATION_REQUIRED) {
+        const token = crypto.randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      await tx.verificationToken.create({
-        data: {
-          userId: user.id,
-          token,
-          expiresAt,
-        },
-      });
+        await tx.verificationToken.create({
+          data: {
+            userId: user.id,
+            token,
+            expiresAt,
+          },
+        });
 
-      return { user, token };
+        return { user, token };
+      }
+
+      return { user, token: null };
     });
 
-    // Send verification email
-    try {
-      await sendVerificationEmail(newUser.user.email, newUser.token, name);
-    } catch (emailError) {
-      console.error("Email sending failed:", emailError);
-      // Don't fail registration if email fails, but inform user
+    if (EMAIL_VERIFICATION_REQUIRED) {
+      try {
+        await sendVerificationEmail(newUser.user.email, newUser.token!, name);
+      } catch (emailError) {
+        console.error("[Registration] Email sending failed:", emailError);
+        return NextResponse.json(
+          {
+            message: "Account created, but we couldn't send the verification email. Please try logging in to request a new verification link.",
+            redirect: "/login",
+          },
+          { status: 202 }
+        );
+      }
+
       return NextResponse.json(
         {
-          message: "Account created but verification email could not be sent. Please contact support.",
-          redirect: "/login",
+          message: "Account created! Please check your email to verify your account.",
+          redirect: "/login?check_email=true",
         },
-        { status: 202 }
+        { status: 201 }
+      );
+    } else {
+      // Auto-login if email verification is disabled
+      await createSession(newUser.user.id, newUser.user.role);
+      
+      const redirectUrl = newUser.user.role === "DOCTOR" ? "/dashboard/doctor" : "/dashboard/student";
+      return NextResponse.json(
+        {
+          role: newUser.user.role,
+          status: newUser.user.status,
+          redirect: redirectUrl,
+        },
+        { status: 201 }
       );
     }
-
-    return NextResponse.json(
-      {
-        message: "Account created! Please check your email to verify your account.",
-        redirect: "/login?check_email=true",
-      },
-      { status: 201 }
-    );
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2002") {
       return NextResponse.json(

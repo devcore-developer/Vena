@@ -7,9 +7,10 @@ import { checkRateLimit } from "@/lib/auth-utils";
 import { sendVerificationEmail } from "@/lib/email";
 import crypto from "crypto";
 
+const EMAIL_VERIFICATION_REQUIRED = process.env.EMAIL_VERIFICATION_REQUIRED === "true";
+
 export async function POST(req: Request) {
   try {
-    // Rate limit by IP
     const ip = req.headers.get("x-forwarded-for") || "unknown";
     if (!checkRateLimit(`login:${ip}`, 5, 15 * 60 * 1000)) {
       return NextResponse.json(
@@ -20,7 +21,6 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    // Validate input
     const result = loginSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
     const { email, password } = result.data;
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Find user in database
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: {
@@ -45,7 +44,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // Generic error — don't reveal whether email exists
     if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },
@@ -53,7 +51,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify password with bcrypt
     const passwordValid = await bcrypt.compare(password, user.passwordHash);
     if (!passwordValid) {
       return NextResponse.json(
@@ -62,7 +59,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check account status
     if (user.status === "SUSPENDED") {
       return NextResponse.json(
         { error: "Your account has been suspended. Please contact support." },
@@ -70,9 +66,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Handle PENDING status (Email Not Verified or Doctor Not Approved)
-    if (user.status === "PENDING") {
-      // 1. Check if there's an existing, valid verification token
+    // Handle PENDING status ONLY if email verification is required
+    if (EMAIL_VERIFICATION_REQUIRED && user.status === "PENDING") {
       const verificationToken = await prisma.verificationToken.findFirst({
         where: {
           userId: user.id,
@@ -90,9 +85,8 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       } else {
-        // 2. Token expired or missing → Generate a new one
         const newToken = crypto.randomBytes(32).toString("hex");
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
         await prisma.verificationToken.deleteMany({
           where: { userId: user.id },
@@ -106,11 +100,10 @@ export async function POST(req: Request) {
           },
         });
 
-        // Send new verification email
         try {
           await sendVerificationEmail(user.email, newToken, user.name);
         } catch (e) {
-          console.error("Failed to resend verification email on login:", e);
+          // silent
         }
 
         return NextResponse.json(
@@ -124,14 +117,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (user.status !== "ACTIVE") {
-      return NextResponse.json(
-        { error: "Your account is not active. Please contact support." },
-        { status: 403 }
-      );
-    }
-
-    // Create session
+    // If we reach here, user is either ACTIVE, or verification is disabled (so PENDING is allowed)
     await createSession(user.id, user.role);
 
     return NextResponse.json({
