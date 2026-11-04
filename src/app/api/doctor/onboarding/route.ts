@@ -9,7 +9,6 @@ export async function GET() {
   try {
     const doctorId = auth.session.userId;
 
-    // 1. Fetch doctor profile
     const doctor = await prisma.user.findUnique({
       where: { id: doctorId },
       select: {
@@ -30,14 +29,13 @@ export async function GET() {
       return NextResponse.json({ error: "Doctor not found" }, { status: 404 });
     }
 
-    // 2. Fetch courses owned by this doctor
     const courses = await prisma.course.findMany({
       where: { doctorId },
       select: {
         id: true,
         title: true,
         status: true,
-        sections: { // أضف السطر ده
+        sections: {
           select: {
             id: true,
             lessons: {
@@ -52,16 +50,20 @@ export async function GET() {
             },
           },
         },
-        CourseLessons: { // أضف السطر ده عشان الدروس المستقلة
+        lessons: {
           where: { sectionId: null },
           select: {
-            id: true, title: true, type: true, content: true, resourceUrl: true, mediaId: true,
+            id: true,
+            title: true,
+            type: true,
+            content: true,
+            resourceUrl: true,
+            mediaId: true,
           },
         },
       },
     });
-    
-    // 3. Calculate checklist items
+
     const checklist = {
       profileComplete: false,
       courseCreated: false,
@@ -70,8 +72,6 @@ export async function GET() {
       contactConfigured: false,
     };
 
-    // Item 1: Complete Profile
-    // Required: name, phone, specialty, bio
     if (
       doctor.name &&
       doctor.name.trim().length >= 2 &&
@@ -85,13 +85,10 @@ export async function GET() {
       checklist.profileComplete = true;
     }
 
-    // Item 2: Create First Course
     if (courses.length > 0) {
       checklist.courseCreated = true;
     }
 
-    // Item 3: Add Lesson Content
-    // Check if any lesson has actual content (video with media, PDF with URL, or text with content)
     let hasLessonContent = false;
     for (const course of courses) {
       for (const section of course.sections) {
@@ -108,15 +105,25 @@ export async function GET() {
         if (hasLessonContent) break;
       }
       if (hasLessonContent) break;
+      
+      // Check sectionless lessons
+      for (const lesson of course.lessons) {
+        if (
+          (lesson.type === "VIDEO" && (lesson.mediaId || lesson.resourceUrl)) ||
+          (lesson.type === "PDF" && lesson.resourceUrl) ||
+          (lesson.type === "TEXT" && lesson.content && lesson.content.trim().length > 0)
+        ) {
+          hasLessonContent = true;
+          break;
+        }
+      }
+      if (hasLessonContent) break;
     }
     checklist.lessonContentAdded = hasLessonContent;
 
-    // Item 4: Publish Course
     const hasPublishedCourse = courses.some((c) => c.status === "PUBLISHED");
     checklist.coursePublished = hasPublishedCourse;
 
-    // Item 5: Configure Contact Settings
-    // Required: phone and isAvailable flag set
     if (
       doctor.phone &&
       doctor.phone.trim().length > 0 &&
@@ -126,7 +133,6 @@ export async function GET() {
       checklist.contactConfigured = true;
     }
 
-    // Calculate percentage
     const completedCount = Object.values(checklist).filter(Boolean).length;
     const totalCount = Object.keys(checklist).length;
     const percentage = Math.round((completedCount / totalCount) * 100);

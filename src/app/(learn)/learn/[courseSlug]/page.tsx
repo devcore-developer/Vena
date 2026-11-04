@@ -19,7 +19,6 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   let course: any = null;
   try {
-// استبدل جزء الـ include بتاع الـ sections بده:
     course = await prisma.course.findUnique({
       where: { slug: params.courseSlug, status: "PUBLISHED" },
       include: {
@@ -28,7 +27,7 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
           include: { lessons: { orderBy: { order: "asc" } } },
           orderBy: { order: "asc" },
         },
-        lessons: { // غيّر CourseLessons لـ lessons
+        lessons: {
           where: { sectionId: null },
           orderBy: { order: "asc" },
         },
@@ -50,7 +49,6 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
     redirect(`/courses/${course.slug}`);
   }
 
-  // جيب اسم الطالب عشان نمرره للـ VideoPlayer يعمل بيه Watermark
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: { name: true },

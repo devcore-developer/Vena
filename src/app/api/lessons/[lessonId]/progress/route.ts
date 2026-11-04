@@ -33,7 +33,6 @@ export async function POST(
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 
-    // استخدام courseId المباشر لو موجود، أو من خلال الـ section
     const courseId = lesson.courseId || lesson.section?.courseId;
 
     if (!courseId) {

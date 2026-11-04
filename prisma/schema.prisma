@@ -148,6 +148,7 @@ model Course {
   doctor            User                   @relation(fields: [doctorId], references: [id])
   media             CourseMedia[]
   sections          CourseSection[]
+  lessons           CourseLesson[] // العلاقة العكسية للدروس المستقلة
   conversations     DoctorConversation[]
   enrollments       Enrollment[]
   exams             Exam[]
@@ -174,7 +175,8 @@ model CourseSection {
 
 model CourseLesson {
   id             String           @id @default(cuid())
-  sectionId      String
+  sectionId      String? // أصبح اختياري
+  courseId       String? // حقل جديد للدروس المستقلة
   title          String
   description    String?
   type           LessonType
@@ -187,10 +189,12 @@ model CourseLesson {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   mediaId        String?
-  section        CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section        CourseSection?   @relation(fields: [sectionId], references: [id], onDelete: Cascade) // العلاقة أصبحت اختيارية
+  course         Course?          @relation(fields: [courseId], references: [id]) // العلاقة الجديدة
   lessonProgress LessonProgress[]
 
   @@index([sectionId])
+  @@index([courseId])
   @@index([isPublished])
 }
 

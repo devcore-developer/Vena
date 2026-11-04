@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { requireDoctorAccess } from "@/lib/auth-utils";
 import type { Permission } from "@/types";
 
-const MAX_VIDEOS_PER_COURSE = 10;
-
 export async function GET(
   _req: Request,
   { params }: { params: { courseId: string } }
@@ -34,8 +32,6 @@ export async function GET(
   }
 }
 
-// استبدل دالة POST بالكامل بده:
-
 export async function POST(
   req: Request,
   { params }: { params: { courseId: string } }
@@ -64,7 +60,7 @@ export async function POST(
     const lesson = await prisma.courseLesson.create({
       data: {
         sectionId: body.sectionId || null,
-        courseId: params.courseId, // أضفنا السطر ده
+        courseId: params.courseId,
         title: body.title,
         type: body.type || "VIDEO",
         content: body.content || null,
