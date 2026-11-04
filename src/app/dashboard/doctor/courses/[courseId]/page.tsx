@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Plus, ArrowLeft, BookOpen, FileText, Save, Eye, EyeOff } from "lucide-react";
 import { CourseStatus } from "@/types";
+import Link from "next/link";
 
 export const metadata = { title: "Manage Course" };
 
@@ -109,12 +110,12 @@ export default async function CourseManagementPage({
 
   return (
     <div>
-      <button
-        onClick={() => window.history.back()}
+      <Link
+        href="/dashboard/doctor/courses"
         className="flex items-center gap-1 text-sm text-charcoal-muted hover:text-vena-700 mb-4"
       >
         <ArrowLeft size={16} /> Back to Courses
-      </button>
+      </Link>
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1">
