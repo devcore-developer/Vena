@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { User, Mail, Phone, Stethoscope, FileText, Save, Shield, Star } from "lucide-react";
-import Link from "next/link";
+import { ImageUpload } from "@/components/ui/ImageUpload";
+import { User, Mail, Phone, Save, Shield, Star } from "lucide-react";
 
 interface Profile {
   id: string;
@@ -14,9 +14,9 @@ interface Profile {
   email: string;
   phone: string;
   role: string;
+  avatarUrl?: string;
   specialty: string;
   bio: string;
-  avatarUrl?: string;
   rating?: number;
   studentsCount?: number;
   coursesCount?: number;
@@ -33,8 +33,8 @@ export default function DoctorProfilePage() {
 
   useEffect(() => {
     fetch("/api/doctor/profile")
-      .then(res => res.json())
-      .then(data => {
+      .then((r) => r.json())
+      .then((data) => {
         setProfile(data);
         setForm({
           name: data.name || "",
@@ -70,10 +70,7 @@ export default function DoctorProfilePage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       const refetch = await fetch("/api/doctor/profile");
-      if (refetch.ok) {
-        const data = await refetch.json();
-        setProfile(data);
-      }
+      if (refetch.ok) setProfile(await refetch.json());
     } else {
       setError("Failed to save. Please try again.");
     }
@@ -89,7 +86,6 @@ export default function DoctorProfilePage() {
         <p className="text-charcoal-muted mt-1">Manage your professional information.</p>
       </div>
 
-      {/* Profile Header Card */}
       <Card className="mb-6">
         <div className="flex items-center gap-4">
           <Avatar name={profile.name} url={profile.avatarUrl} className="h-16 w-16 text-lg" />
@@ -111,7 +107,6 @@ export default function DoctorProfilePage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Edit Form */}
         <div className="lg:col-span-2">
           <Card>
             <form onSubmit={handleSave} className="space-y-5">
@@ -126,8 +121,8 @@ export default function DoctorProfilePage() {
                       type="text"
                       required
                       value={form.name}
-                      onChange={e => setForm({ ...form, name: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
                     />
                   </div>
                   <div>
@@ -138,7 +133,7 @@ export default function DoctorProfilePage() {
                         type="email"
                         value={profile.email}
                         disabled
-                        className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal-muted bg-slate-50"
+                        className="w-full pl-9 pr-4 py-2.5 border border-vena-100 rounded-lg text-sm text-charcoal-muted bg-slate-50"
                       />
                     </div>
                     <p className="text-xs text-charcoal-muted mt-1">Email cannot be changed here.</p>
@@ -150,29 +145,25 @@ export default function DoctorProfilePage() {
                       <input
                         type="tel"
                         value={form.phone}
-                        onChange={e => setForm({ ...form, phone: e.target.value })}
-                        className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        className="w-full pl-9 pr-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
                         placeholder="01xxxxxxxxx"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-charcoal mb-1">Avatar URL</label>
-                    <input
-                      type="url"
-                      value={form.avatarUrl}
-                      onChange={e => setForm({ ...form, avatarUrl: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
-                      placeholder="https://..."
+                    <label className="block text-sm font-medium text-charcoal mb-1">Profile Image</label>
+                    <ImageUpload 
+                      currentImageUrl={form.avatarUrl} 
+                      onUploadComplete={(url) => setForm({ ...form, avatarUrl: url })}
+                      folder="profiles"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100">
-                <h3 className="text-sm font-semibold text-charcoal mb-4 flex items-center gap-2">
-                  <Stethoscope size={16} /> Professional Information
-                </h3>
+              <div className="pt-4 border-t border-vena-100">
+                <h3 className="text-sm font-semibold text-charcoal mb-4">Professional Information</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-charcoal mb-1">Specialty</label>
@@ -180,8 +171,8 @@ export default function DoctorProfilePage() {
                       type="text"
                       required
                       value={form.specialty}
-                      onChange={e => setForm({ ...form, specialty: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
+                      onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
                       placeholder="e.g. Clinical Anatomy"
                     />
                   </div>
@@ -191,8 +182,8 @@ export default function DoctorProfilePage() {
                       rows={4}
                       maxLength={500}
                       value={form.bio}
-                      onChange={e => setForm({ ...form, bio: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm resize-none"
+                      onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm resize-none"
                       placeholder="Tell students about your background and expertise..."
                     />
                     <p className="text-xs text-charcoal-muted mt-1">{form.bio.length}/500 characters</p>
@@ -212,7 +203,6 @@ export default function DoctorProfilePage() {
           </Card>
         </div>
 
-        {/* Side Panel */}
         <div className="space-y-4">
           <Card>
             <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">

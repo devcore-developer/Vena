@@ -1,13 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
 
 export default function PublicHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.isLoggedIn) setIsLoggedIn(true);
+      })
+      .catch(() => {});
+  }, []);
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -36,12 +46,20 @@ export default function PublicHeader() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button href="/login" variant="ghost" size="sm">
-            Login
-          </Button>
-          <Button href="/register" size="sm">
-            Register
-          </Button>
+          {isLoggedIn ? (
+            <Button href="/dashboard" size="sm">
+              My Dashboard
+            </Button>
+          ) : (
+            <>
+              <Button href="/login" variant="ghost" size="sm">
+                Login
+              </Button>
+              <Button href="/register" size="sm">
+                Register
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -66,21 +84,20 @@ export default function PublicHeader() {
               </Link>
             ))}
             <div className="pt-3 border-t border-vena-50 flex flex-col gap-2">
-              <Button
-                href="/login"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setMobileOpen(false)}
-              >
-                Login
-              </Button>
-              <Button
-                href="/register"
-                className="w-full"
-                onClick={() => setMobileOpen(false)}
-              >
-                Register
-              </Button>
+              {isLoggedIn ? (
+                <Button href="/dashboard" className="w-full">
+                  My Dashboard
+                </Button>
+              ) : (
+                <>
+                  <Button href="/login" variant="secondary" className="w-full">
+                    Login
+                  </Button>
+                  <Button href="/register" className="w-full">
+                    Register
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

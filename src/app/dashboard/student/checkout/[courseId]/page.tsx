@@ -68,7 +68,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
 
   // Receipt state
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [transactionRef, setTransactionRef] = useState("");
   const [studentNote, setStudentNote] = useState("");
 
   useEffect(() => {
@@ -164,7 +163,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
     try {
       const formData = new FormData();
       formData.append("receipt", receiptFile);
-      if (transactionRef) formData.append("transactionRef", transactionRef);
       if (studentNote) formData.append("studentNote", studentNote);
 
       const res = await fetch(`/api/student/payments/${payment.id}`, {
@@ -357,19 +355,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
           )}
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">
-                Transaction Reference (optional)
-              </label>
-              <input
-                type="text"
-                value={transactionRef}
-                onChange={(e) => setTransactionRef(e.target.value)}
-                className="w-full px-4 py-2.5 border border-vena-100 rounded-lg focus:ring-2 focus:ring-vena-500 outline-none text-sm"
-                placeholder="Transaction ID from your bank app"
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-charcoal mb-1">
                 Note (optional)

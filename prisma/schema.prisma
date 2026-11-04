@@ -391,8 +391,8 @@ model CourseSection {
 
 model CourseLesson {
   id          String           @id @default(cuid())
-  sectionId   String
-  section     CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sectionId   String?
+  section     CourseSection?   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   title       String
   description String?           @db.Text
   type        LessonType
