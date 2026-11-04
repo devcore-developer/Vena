@@ -1,54 +1,153 @@
 "use client";
 
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CheckCircle, Circle, ArrowRight } from "lucide-react";
+import { CheckCircle, Circle, User, BookOpen, FileText, Globe, Phone } from "lucide-react";
+
+interface ChecklistData {
+  checklist: {
+    profileComplete: boolean;
+    courseCreated: boolean;
+    lessonContentAdded: boolean;
+    coursePublished: boolean;
+    contactConfigured: boolean;
+  };
+  percentage: number;
+  completedCount: number;
+  totalCount: number;
+}
 
 export default function DoctorOnboardingChecklist() {
-  // Mock data - in a real app, fetch from DB
-  const steps = [
-    { name: "Complete Profile", href: "/dashboard/doctor/profile", done: true },
-    { name: "Create First Course", href: "/dashboard/doctor/courses/new", done: true },
-    { name: "Add Lesson Content", href: "/dashboard/doctor/courses", done: false },
-    { name: "Publish Course", href: "/dashboard/doctor/courses", done: false },
-    { name: "Configure Contact Settings", href: "/dashboard/settings", done: false },
+  const [data, setData] = useState<ChecklistData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/doctor/onboarding")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading || !data) {
+    return (
+      <Card className="mb-8 p-6">
+        <div className="animate-pulse">
+          <div className="h-6 w-48 bg-slate-100 rounded mb-4" />
+          <div className="h-2 w-full bg-slate-100 rounded mb-4" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-8 w-full bg-slate-50 rounded" />
+            ))}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  const items = [
+    {
+      key: "profileComplete",
+      label: "Complete Profile",
+      description: "Add your name, phone, specialty, and bio",
+      href: "/dashboard/doctor/profile",
+      icon: User,
+    },
+    {
+      key: "courseCreated",
+      label: "Create First Course",
+      description: "Create your first course to start teaching",
+      href: "/dashboard/doctor/courses",
+      icon: BookOpen,
+    },
+    {
+      key: "lessonContentAdded",
+      label: "Add Lesson Content",
+      description: "Add video, PDF, or text content to your lessons",
+      href: "/dashboard/doctor/courses",
+      icon: FileText,
+    },
+    {
+      key: "coursePublished",
+      label: "Publish Course",
+      description: "Publish a course to make it available to students",
+      href: "/dashboard/doctor/courses",
+      icon: Globe,
+    },
+    {
+      key: "contactConfigured",
+      label: "Configure Contact Settings",
+      description: "Set your phone number and availability",
+      href: "/dashboard/doctor/profile",
+      icon: Phone,
+    },
   ];
 
-  const completedCount = steps.filter(s => s.done).length;
-  const progress = (completedCount / steps.length) * 100;
-
   return (
-    <Card className="mb-8 bg-vena-50/50 border-vena-100">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="font-semibold text-charcoal">Setup Checklist</h2>
-        <span className="text-xs font-medium text-vena-700">{progress}% Complete</span>
+    <Card className="mb-8 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-charcoal">Setup Checklist</h2>
+          <p className="text-sm text-charcoal-muted mt-1">
+            Complete these steps to set up your account
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-bold text-vena-600">{data.percentage}%</p>
+          <p className="text-xs text-charcoal-muted">Complete</p>
+        </div>
       </div>
-      <div className="w-full h-1.5 bg-vena-100 rounded-full mb-6">
-        <div className="h-full bg-vena-500 rounded-full transition-all" style={{ width: `${progress}%` }}></div>
+
+      {/* Progress Bar */}
+      <div className="w-full bg-slate-100 rounded-full h-2 mb-6">
+        <div
+          className="h-full bg-vena-500 rounded-full transition-all duration-500"
+          style={{ width: `${data.percentage}%` }}
+        />
       </div>
-      <div className="space-y-3">
-        {steps.map(step => (
-          <div key={step.name} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {step.done ? (
-                <CheckCircle size={18} className="text-green-500" />
+
+      {/* Checklist Items */}
+      <div className="space-y-2">
+        {items.map((item) => {
+          const isComplete = data.checklist[item.key as keyof typeof data.checklist];
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.key}
+              className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                isComplete ? "bg-vena-50/50" : "bg-slate-50/50"
+              }`}
+            >
+              {isComplete ? (
+                <CheckCircle size={20} className="text-vena-500 flex-shrink-0" />
               ) : (
-                <Circle size={18} className="text-charcoal-muted opacity-50" />
+                <Circle size={20} className="text-charcoal-muted flex-shrink-0" />
               )}
-              <span className={`text-sm ${step.done ? "text-charcoal-muted line-through" : "text-charcoal font-medium"}`}>
-                {step.name}
-              </span>
-            </div>
-            {!step.done && (
-              <Link href={step.href}>
-                <Button size="sm" variant="ghost">
-                  Start <ArrowRight size={14} className="ml-1" />
+              <div className="flex-1 min-w-0">
+                <p
+                  className={`text-sm font-medium ${
+                    isComplete ? "text-vena-700" : "text-charcoal"
+                  }`}
+                >
+                  {item.label}
+                </p>
+                <p className="text-xs text-charcoal-muted truncate">
+                  {item.description}
+                </p>
+              </div>
+              {!isComplete && (
+                <Button href={item.href} variant="ghost" size="sm">
+                  <Icon size={14} className="mr-1" />
+                  Start
                 </Button>
-              </Link>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
