@@ -3,10 +3,9 @@ import { getValidSession } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
-import { BookOpen, Users, Lock, GraduationCap } from "lucide-react";
+import { Avatar } from "@/components/ui/Avatar";
+import { BookOpen, Users, GraduationCap } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 export const metadata = { title: "Courses" };
 
@@ -60,7 +59,8 @@ export default async function CoursesPage({
             : {}),
         },
         include: {
-          doctor: { select: { name: true } },
+          // FIX: أضفنا avatarUrl
+          doctor: { select: { name: true, avatarUrl: true } },
           category: { select: { name: true } },
           _count: { select: { enrollments: true } },
         },
@@ -81,7 +81,8 @@ export default async function CoursesPage({
             : {}),
         },
         include: {
-          doctor: { select: { name: true } },
+          // FIX: أضفنا avatarUrl
+          doctor: { select: { name: true, avatarUrl: true } },
           category: { select: { name: true } },
           _count: { select: { enrollments: true } },
         },
@@ -148,7 +149,19 @@ export default async function CoursesPage({
                     {course.shortDescription}
                   </p>
                 )}
-                <p className="text-sm text-charcoal-muted mt-2">{course.doctor.name}</p>
+
+                {/* FIX: صورة الدكتور + الاسم */}
+                <div className="flex items-center gap-2 mt-3">
+                  <Avatar
+                    name={course.doctor.name}
+                    url={course.doctor.avatarUrl}
+                    className="h-7 w-7 text-xs"
+                  />
+                  <span className="text-sm text-charcoal-muted">
+                    {course.doctor.name}
+                  </span>
+                </div>
+
                 <div className="flex items-center justify-between mt-4 pt-3 border-t border-vena-50">
                   <span className="font-bold text-charcoal">
                     {course.price.toNumber() === 0 ? "Free" : `${course.price.toNumber()} EGP`}
@@ -165,3 +178,4 @@ export default async function CoursesPage({
     </div>
   );
 }
+

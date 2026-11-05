@@ -7,6 +7,16 @@ const nextConfig = {
       bodySizeLimit: '250mb',
     },
   },
+  // FIX: سماح للصور من مصادر خارجية (لو هتستخدم next/image)
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.amazonaws.com' },
+      { protocol: 'https', hostname: '**.cloudinary.com' },
+      { protocol: 'https', hostname: '**.vercel-storage.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
+    ],
+  },
   async headers() {
     return [
       {

@@ -25,7 +25,10 @@ export async function GET() {
     include: {
       course: {
         include: {
-          doctor: { select: { name: true } },
+          // FIX: أضفنا avatarUrl للدكتور
+          doctor: {
+            select: { name: true, avatarUrl: true },
+          },
           category: { select: { name: true } },
         },
       },
@@ -40,7 +43,6 @@ export async function GET() {
 
   const data = await Promise.all(
     validEnrollments.map(async (enr) => {
-      // Calculate progress dynamically to ensure it's always accurate
       const progress = await calculateCourseProgress(auth.session.userId, enr.courseId);
 
       // Update enrollment progress in DB if it changed (fixes 0% issue)
@@ -62,6 +64,7 @@ export async function GET() {
           slug: enr.course.slug,
           shortDescription: enr.course.shortDescription,
           doctorName: enr.course.doctor.name,
+          doctorAvatar: enr.course.doctor.avatarUrl || null, // FIX
           thumbnailColor: enr.course.thumbnailColor,
           price: enr.course.price.toNumber(),
           isFree: enr.course.price.toNumber() === 0,

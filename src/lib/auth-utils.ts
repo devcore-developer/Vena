@@ -7,7 +7,11 @@ import type { Permission, Role } from "@/types";
 // RESULT TYPES
 // ============================================================
 
-type SessionData = { userId: string; role: string };
+type SessionData = {
+  userId: string;
+  role: string;
+  doctorId?: string; // FIX: للسكرتيرة نرجع doctorId بتاع الدكتور بتاعها
+};
 
 type AuthResult =
   | { ok: true; session: SessionData }
@@ -55,7 +59,13 @@ export async function requireAuth(): Promise<AuthResult> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, role: true, status: true },
+      select: {
+        id: true,
+        role: true,
+        status: true,
+        // FIX: لو سكرتيرة، نرجع doctorId من profile بتاعها
+        secretaryProfile: { select: { doctorId: true, permissions: true } },
+      },
     });
 
     if (!user || user.status !== "ACTIVE") {
@@ -68,7 +78,18 @@ export async function requireAuth(): Promise<AuthResult> {
       };
     }
 
-    return { ok: true, session: { userId: user.id, role: user.role } };
+    // FIX: رجّع doctorId لو السكرتيرة
+    const doctorId =
+      user.role === "SECRETARY" ? user.secretaryProfile?.doctorId : undefined;
+
+    return {
+      ok: true,
+      session: {
+        userId: user.id,
+        role: user.role,
+        doctorId,
+      },
+    };
   } catch {
     return {
       ok: false,
@@ -81,9 +102,7 @@ export async function requireAuth(): Promise<AuthResult> {
 }
 
 /** Require a specific role */
-export async function requireRole(
-  ...roles: Role[]
-): Promise<AuthResult> {
+export async function requireRole(...roles: Role[]): Promise<AuthResult> {
   const result = await requireAuth();
   if (!result.ok) return result;
 
@@ -97,8 +116,13 @@ export async function requireRole(
   return result;
 }
 
-/** Require DOCTOR or SECRETARY with a specific permission */
-/** Require DOCTOR or SECRETARY with a specific permission */
+/**
+ * Require DOCTOR or SECRETARY with a specific permission.
+ * - DOCTOR → full access to their own workspace (session.doctorId = session.userId)
+ * - SECRETARY → must have the specific permission (session.doctorId = the linked doctor's id)
+ *
+ * Returns session.doctorId that you should use to scope queries.
+ */
 export async function requireDoctorAccess(
   permission: Permission
 ): Promise<AuthResult> {
@@ -108,7 +132,12 @@ export async function requireDoctorAccess(
   const role = result.session.role;
 
   // DOCTOR has full access to their workspace
-  if (role === "DOCTOR") return result;
+  if (role === "DOCTOR") {
+    return {
+      ok: true,
+      session: { ...result.session, doctorId: result.session.userId },
+    };
+  }
 
   // SECRETARY must have the specific permission
   if (role === "SECRETARY") {
@@ -127,7 +156,14 @@ export async function requireDoctorAccess(
         };
       }
 
-      return result;
+      // FIX: رجّع doctorId بتاع الدكتور عشان الـ API يستخدمه
+      return {
+        ok: true,
+        session: {
+          ...result.session,
+          doctorId: secretaryProfile.doctorId,
+        },
+      };
     } catch {
       return {
         ok: false,

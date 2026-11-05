@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Avatar } from "@/components/ui/Avatar";
 import { BookOpen, PlayCircle, Award, Search } from "lucide-react";
 import { EnrollmentStatus } from "@/types";
 
@@ -19,6 +20,7 @@ interface StudentCourse {
     slug: string;
     shortDescription?: string;
     doctorName?: string;
+    doctorAvatar?: string | null; // FIX: أضفنا doctorAvatar
     thumbnailColor?: string;
     price: number;
     isFree?: boolean;
@@ -124,8 +126,20 @@ export default function StudentCoursesPage() {
               </div>
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="text-lg font-semibold text-charcoal">{c.course.title}</h3>
-                <p className="text-sm text-charcoal-muted mt-1">{c.course.doctorName}</p>
-                <p className="text-xs text-charcoal-muted mt-1">{c.course.language}</p>
+
+                {/* FIX: صورة الدكتور + الاسم */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Avatar
+                    name={c.course.doctorName || "Doctor"}
+                    url={c.course.doctorAvatar}
+                    className="h-6 w-6 text-xs"
+                  />
+                  <p className="text-sm text-charcoal-muted">
+                    {c.course.doctorName}
+                  </p>
+                </div>
+
+                <p className="text-xs text-charcoal-muted mt-2">{c.course.language}</p>
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-1">

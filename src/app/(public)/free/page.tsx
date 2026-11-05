@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FileText, Video, ExternalLink, Gift, Search, BookOpen, Users } from "lucide-react";
+import { Video, Gift, Search } from "lucide-react";
 import Link from "next/link";
 
 export const metadata = { title: "Free VENA" };
@@ -40,19 +40,16 @@ export default async function FreePage({ searchParams }: { searchParams: { searc
       <div className="flex flex-col sm:flex-row gap-3 mb-8">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-2.5 text-charcoal-muted" size={18} />
-          <input
-            type="text"
-            placeholder="Search videos..."
-            defaultValue={searchParams.search || ""}
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
-            onChange={(e) => {
-              const value = e.target.value;
-              const url = new URL(window.location.href);
-              if (value) url.searchParams.set("search", value);
-              else url.searchParams.delete("search");
-              window.location.href = url.toString();
-            }}
-          />
+          {/* FIX: استخدمنا <form> بـ method=GET عشان يشتغل بدون جافاسكريبت */}
+          <form action="/free" method="get" className="w-full">
+            <input
+              type="text"
+              name="search"
+              placeholder="Search videos..."
+              defaultValue={searchParams.search || ""}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
+            />
+          </form>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-2">
           <Link href={`/free`}>

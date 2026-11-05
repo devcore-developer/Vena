@@ -14,8 +14,11 @@ export async function GET(req: Request) {
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status");
 
+  // FIX: استخدم doctorId من session
+  const doctorId = auth.session.doctorId || auth.session.userId;
+
   const where = {
-    doctorId: auth.session.userId,
+    doctorId,
     ...(search
       ? { title: { contains: search, mode: "insensitive" as const } }
       : {}),
@@ -28,6 +31,10 @@ export async function GET(req: Request) {
     where,
     include: {
       category: true,
+      // FIX: include doctor عشان نرجع اسم الدكتور وصورته
+      doctor: {
+        select: { id: true, name: true, avatarUrl: true },
+      },
       _count: { select: { enrollments: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -40,6 +47,9 @@ export async function GET(req: Request) {
   const data = courses.map((c) => ({
     id: c.id,
     doctorId: c.doctorId,
+    // FIX: رجّع بيانات الدكتور كاملة
+    doctorName: c.doctor.name,
+    doctorAvatar: c.doctor.avatarUrl || null,
     title: c.title,
     slug: c.slug,
     shortDescription: c.shortDescription,
@@ -76,11 +86,19 @@ export async function POST(req: Request) {
   const auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
   if (!auth.ok) return auth.response;
 
+  // FIX: لو السكرتيرة بتعمل POST، رفض الطلب (مينفعش سكرتيرة تنشئ كورس)
+  if (auth.session.role === "SECRETARY") {
+    return NextResponse.json(
+      { error: "Only doctors can create courses" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json();
     const user = await prisma.user.findUnique({
       where: { id: auth.session.userId },
-      select: { name: true },
+      select: { name: true, avatarUrl: true },
     });
 
     const slug =
@@ -112,6 +130,7 @@ export async function POST(req: Request) {
       id: newCourse.id,
       doctorId: newCourse.doctorId,
       doctorName: user?.name,
+      doctorAvatar: user?.avatarUrl || null, // FIX
       title: newCourse.title,
       slug: newCourse.slug,
       status: newCourse.status,
@@ -128,3 +147,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -13,8 +13,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const search = url.searchParams.get("search") || "";
 
+  // FIX: استخدم doctorId من session (بيرجع doctorId بتاع الدكتور للسكرتيرة)
+  const doctorId = auth.session.doctorId || auth.session.userId;
+
   const doctorCourses = await prisma.course.findMany({
-    where: { doctorId: auth.session.userId },
+    where: { doctorId }, // ← هنا التعديل
     select: { id: true },
   });
   const courseIds = doctorCourses.map((c) => c.id);
