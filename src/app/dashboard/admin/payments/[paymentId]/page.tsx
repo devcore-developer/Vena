@@ -219,7 +219,7 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
       <Modal isOpen={showApproveModal} onClose={() => setShowApproveModal(false)} title="Confirm Approval">
         <div className="space-y-4">
           <p className="text-sm text-charcoal-muted">
-            Are you sure you want to approve this payment? This will activate the student's enrollment and grant access to the course.
+            Are you sure you want to approve this payment? This will activate the student&apos;s enrollment and grant access to the course.
           </p>
           <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
             <div className="flex justify-between"><span className="text-charcoal-muted">Student:</span><span className="font-medium text-charcoal">{payment.studentName}</span></div>
