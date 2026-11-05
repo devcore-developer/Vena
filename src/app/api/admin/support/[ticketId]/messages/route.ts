@@ -83,13 +83,13 @@ export async function POST(
     }),
   ]);
 
-  // Notify ticket owner
+  // Notify ticket owner (Student or Doctor)
   await createNotification(
     ticket.userId,
     "SUPPORT_REPLY",
-    "Support reply received",
-    body.trim().substring(0, 100),
-    "/dashboard/student/support"
+    "Support Reply Received",
+    `Admin replied to your ticket: ${ticket.subject}`,
+    "/dashboard/student/support" // Note: This link works for students. If doctor, they have their own support route.
   );
 
   return NextResponse.json({

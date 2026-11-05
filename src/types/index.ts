@@ -12,7 +12,12 @@ export type Permission =
   | "VIEW_MESSAGES"
   | "MANAGE_MESSAGES"
   | "VIEW_SUPPORT"
-  | "MANAGE_SUPPORT";export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  | "MANAGE_SUPPORT"
+  | "VIEW_FINANCE"
+  | "MANAGE_FINANCE";
+  
+
+export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type ExamType = "COURSE_EXAM" | "PRACTICE_EXAM" | "PREVIOUS_EXAM";
 export type ExamStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "ESSAY";

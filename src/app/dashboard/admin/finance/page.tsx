@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
-import { Badge, getStatusVariant } from "@/components/ui/Badge";
-import { DollarSign, TrendingUp, Wallet, CreditCard } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { DollarSign, TrendingUp, Wallet, CreditCard, Users } from "lucide-react";
+import Link from "next/link";
 
 interface FinanceSummary {
   totalGrossSales: number;
@@ -110,11 +111,19 @@ export default function AdminFinancePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-charcoal">Finance</h1>
-        <p className="text-charcoal-muted mt-1">
-          Platform financial overview and transaction history.
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-charcoal">Finance</h1>
+          <p className="text-charcoal-muted mt-1">
+            Platform financial overview and transaction history.
+          </p>
+        </div>
+        {/* زر التحويل لصفحة مدفوعات الدكاترة */}
+        <Link href="/dashboard/admin/finance/payouts">
+          <Button variant="secondary" size="sm">
+            <Users size={16} className="mr-2" /> Doctor Payouts
+          </Button>
+        </Link>
       </div>
 
       {/* Stats Grid */}

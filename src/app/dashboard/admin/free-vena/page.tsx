@@ -59,7 +59,7 @@ export default function AdminFreeVenaPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-charcoal">Free VENA</h1>
-          <p className="text-charcoal-muted mt-1">Manage free resources.</p>
+          <p className="text-charcoal-muted mt-1">Manage free resources and videos.</p>
         </div>
         <Button href="/dashboard/admin/free-vena/new"><Plus className="mr-2 h-4 w-4" /> New Resource</Button>
       </div>
@@ -86,19 +86,13 @@ export default function AdminFreeVenaPage() {
                     <Button variant="secondary" size="sm"><Edit className="h-3.5 w-3.5" /></Button>
                   </Link>
                   {r.status === "DRAFT" && (
-                    <Button size="sm" onClick={() => updateStatus(r.id, "PUBLISHED")}>
-                      <Eye className="h-3.5 w-3.5" />
-                    </Button>
+                    <Button size="sm" onClick={() => updateStatus(r.id, "PUBLISHED")}><Eye className="h-3.5 w-3.5" /></Button>
                   )}
                   {r.status === "PUBLISHED" && (
-                    <Button variant="secondary" size="sm" onClick={() => updateStatus(r.id, "ARCHIVED")}>
-                      <Archive className="h-3.5 w-3.5" />
-                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => updateStatus(r.id, "ARCHIVED")}><Archive className="h-3.5 w-3.5" /></Button>
                   )}
                   {r.status === "ARCHIVED" && (
-                    <Button size="sm" onClick={() => updateStatus(r.id, "PUBLISHED")}>
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </Button>
+                    <Button size="sm" onClick={() => updateStatus(r.id, "PUBLISHED")}><RotateCcw className="h-3.5 w-3.5" /></Button>
                   )}
                 </div>
               </div>

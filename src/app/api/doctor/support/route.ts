@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDoctorAccess } from "@/lib/auth-utils";
+import { createNotification } from "@/lib/notifications";
 import type { Permission } from "@/types";
 
 export async function GET() {
@@ -52,8 +53,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const now = new Date();
-
   // Create ticket + first message atomically
   const ticket = await prisma.$transaction(async (tx) => {
     const newTicket = await tx.supportTicket.create({
@@ -76,6 +75,27 @@ export async function POST(req: Request) {
 
     return newTicket;
   });
+
+  // Notify all Super Admins about the new support ticket
+  const admins = await prisma.user.findMany({
+    where: { role: "SUPER_ADMIN", status: "ACTIVE" },
+    select: { id: true },
+  });
+
+  const doctor = await prisma.user.findUnique({
+    where: { id: auth.session.userId },
+    select: { name: true },
+  });
+
+  for (const admin of admins) {
+    await createNotification(
+      admin.id,
+      "SUPPORT_REPLY",
+      "New Support Ticket",
+      `${doctor?.name || "A doctor"} created a support ticket: ${subject}`,
+      `/dashboard/admin/support`
+    );
+  }
 
   return NextResponse.json({
     id: ticket.id,

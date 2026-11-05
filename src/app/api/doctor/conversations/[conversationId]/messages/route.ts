@@ -69,7 +69,7 @@ export async function POST(
     );
   }
 
-  // Create message + update conversation + notify (atomic)
+  // Create message + update conversation
   const [newMessage] = await prisma.$transaction([
     prisma.doctorMessage.create({
       data: {
@@ -84,13 +84,22 @@ export async function POST(
     }),
   ]);
 
-  // Notify student (outside transaction)
+  // Notify the other party (Student or Doctor)
+  const sender = await prisma.user.findUnique({
+    where: { id: auth.session.userId },
+    select: { name: true, role: true },
+  });
+
+  // If sender is Doctor, notify Student. If sender is Student, notify Doctor.
+  const recipientId = sender?.role === "DOCTOR" ? conversation.studentId : conversation.doctorId;
+  const recipientLink = sender?.role === "DOCTOR" ? "/dashboard/student/messages" : "/dashboard/doctor/messages";
+
   await createNotification(
-    conversation.studentId,
+    recipientId,
     "DOCTOR_MESSAGE",
-    "New message from your doctor",
-    body.trim().substring(0, 100),
-    `/learn/${conversation.courseId || ""}`
+    `New message from ${sender?.role === "DOCTOR" ? "Doctor" : "Student"}`,
+    `${sender?.name}: ${body.trim().substring(0, 100)}`,
+    recipientLink
   );
 
   return NextResponse.json({

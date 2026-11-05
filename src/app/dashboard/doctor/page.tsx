@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import DoctorOnboardingChecklist from "@/components/onboarding/DoctorOnboardingChecklist";
+import SecretaryDashboard from "@/components/dashboard/SecretaryDashboard";
 import { BookOpen, Users, Wallet, TrendingUp } from "lucide-react";
 import { redirect } from "next/navigation";
 
@@ -12,7 +13,12 @@ export default async function DoctorDashboard() {
   const session = await getValidSession();
   if (!session) redirect("/login");
 
-  // Parallel data fetches
+  // If secretary, render the Secretary Dashboard
+  if (session.role === "SECRETARY") {
+    return <SecretaryDashboard />;
+  }
+
+  // Parallel data fetches for Doctor
   const [financial, courses, recentEnrollments, totalStudents] =
     await Promise.all([
       getDoctorFinancialSummary(session.userId),
@@ -68,12 +74,8 @@ export default async function DoctorDashboard() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-charcoal">
-          Welcome back, Doctor
-        </h1>
-        <p className="text-charcoal-muted mt-1">
-          Manage your courses, view earnings, and track student progress.
-        </p>
+        <h1 className="text-2xl font-bold text-charcoal">Welcome back, Doctor</h1>
+        <p className="text-charcoal-muted mt-1">Manage your courses, view earnings, and track student progress.</p>
       </div>
 
       <DoctorOnboardingChecklist />
@@ -98,13 +100,10 @@ export default async function DoctorDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Enrollments */}
         <Card className="lg:col-span-2">
-          <h2 className="font-semibold text-charcoal mb-4">
-            Recent Enrollments
-          </h2>
+          <h2 className="font-semibold text-charcoal mb-4">Recent Enrollments</h2>
           {recentEnrollments.length === 0 ? (
             <p className="text-sm text-charcoal-muted py-4">
-              No enrollments yet. Publish your course to start receiving
-              students.
+              No enrollments yet. Publish your course to start receiving students.
             </p>
           ) : (
             <div className="space-y-3">
@@ -117,7 +116,7 @@ export default async function DoctorDashboard() {
                     name={enr.student.name}
                     className="h-8 w-8 text-xs"
                   />
-                  <div className="flex-1">
+                  <div>
                     <p className="text-sm font-medium text-charcoal">
                       {enr.student.name}
                     </p>
@@ -136,9 +135,7 @@ export default async function DoctorDashboard() {
 
         {/* Earnings Snapshot */}
         <Card>
-          <h2 className="font-semibold text-charcoal mb-4">
-            Earnings Snapshot
-          </h2>
+          <h2 className="font-semibold text-charcoal mb-4">Earnings Snapshot</h2>
           <div className="space-y-3">
             <div>
               <p className="text-xs text-charcoal-muted">Gross Sales</p>
@@ -147,9 +144,7 @@ export default async function DoctorDashboard() {
               </p>
             </div>
             <div>
-              <p className="text-xs text-charcoal-muted">
-                Platform Commission
-              </p>
+              <p className="text-xs text-charcoal-muted">Platform Commission</p>
               <p className="text-sm font-medium text-red-500">
                 -{financial.platformCommission.toFixed(0)} EGP
               </p>

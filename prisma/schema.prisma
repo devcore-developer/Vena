@@ -680,6 +680,8 @@ enum Permission {
   MANAGE_MESSAGES
   VIEW_SUPPORT
   MANAGE_SUPPORT
+  VIEW_FINANCE
+  MANAGE_FINANCE
 }
 
 enum CourseStatus {
