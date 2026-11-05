@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ArrowLeft, Check, X, FileText, AlertCircle } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { ArrowLeft, Check, X, FileText, AlertCircle, ShieldCheck, Ban } from "lucide-react";
 
 interface PaymentDetail {
   id: string;
@@ -29,7 +30,8 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
   const router = useRouter();
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [action, setAction] = useState<"approve" | "reject" | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
   const [reason, setReason] = useState("");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -45,41 +47,57 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
       .catch(() => setLoading(false));
   }, [params.paymentId]);
 
-  const handleAction = async () => {
-    if (!payment) return;
-    if (action === "reject" && !reason.trim()) {
-      setError("Rejection reason is required");
-      return;
-    }
-
-    if (!confirm(`Are you sure you want to ${action} this payment?`)) return;
-
+  const handleApprove = async () => {
     setProcessing(true);
     setError("");
-
     try {
-      const endpoint = action === "approve" ? "approve" : "reject";
-      const body = action === "reject" ? { rejectionReason: reason } : {};
-
-      const res = await fetch(`/api/admin/payments/${payment.id}/${endpoint}`, {
+      const res = await fetch(`/api/admin/payments/${payment!.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed");
-        setProcessing(false);
-        return;
+        throw new Error(data.error || "Failed to approve payment");
       }
 
+      setShowApproveModal(false);
       router.push("/dashboard/admin/payments");
       router.refresh();
-    } catch {
-      setError("Failed");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
+  };
+
+  const handleReject = async () => {
+    if (!reason.trim()) {
+      setError("Rejection reason is required");
+      return;
+    }
+    setProcessing(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/payments/${payment!.id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rejectionReason: reason }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to reject payment");
+      }
+
+      setShowRejectModal(false);
+      router.push("/dashboard/admin/payments");
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (loading) return <div className="animate-pulse h-64 bg-vena-50 rounded-xl" />;
@@ -109,7 +127,6 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Student & Course Info */}
           <Card>
             <h2 className="font-semibold text-charcoal mb-4">Transaction Details</h2>
             <div className="space-y-3 text-sm">
@@ -131,24 +148,21 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
             </div>
           </Card>
 
-          {/* Receipt */}
           <Card>
             <h2 className="font-semibold text-charcoal mb-4">Payment Receipt</h2>
             {payment.hasReceipt ? (
-              <div className="space-y-3">
-                <a
-                  href={`/api/admin/payments/${payment.id}/receipt`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <div className="border border-vena-100 rounded-lg p-6 text-center hover:bg-vena-50 transition">
-                    <FileText className="mx-auto text-vena-600 mb-2" size={32} />
-                    <p className="text-sm text-vena-700 font-medium">Click to view receipt</p>
-                    <p className="text-xs text-charcoal-muted mt-1">Opens in new tab</p>
-                  </div>
-                </a>
-              </div>
+              <a
+                href={`/api/admin/payments/${payment.id}/receipt`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <div className="border border-vena-100 rounded-lg p-6 text-center hover:bg-vena-50 transition">
+                  <FileText className="mx-auto text-vena-600 mb-2" size={32} />
+                  <p className="text-sm text-vena-700 font-medium">Click to view receipt</p>
+                  <p className="text-xs text-charcoal-muted mt-1">Opens in new tab</p>
+                </div>
+              </a>
             ) : (
               <div className="p-6 bg-amber-50 rounded-lg text-center">
                 <AlertCircle className="mx-auto text-amber-500 mb-2" size={32} />
@@ -172,54 +186,25 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
           </Card>
         </div>
 
-        {/* Actions Sidebar */}
         <div className="space-y-4">
           <Card>
             <h3 className="font-semibold text-charcoal mb-4">Review Actions</h3>
 
             {payment.status === "PENDING" || payment.status === "UNDER_REVIEW" ? (
               <div className="space-y-3">
-                {error && (
-                  <div className="bg-red-50 text-red-600 text-xs p-2 rounded">{error}</div>
-                )}
-
-                {action === "reject" && (
-                  <div>
-                    <label className="block text-sm font-medium text-charcoal mb-1">Rejection Reason *</label>
-                    <textarea
-                      rows={3}
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500 resize-none"
-                      placeholder="Explain why this is rejected..."
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => { setAction("approve"); setReason(""); setError(""); }}
-                    disabled={action === "approve"}
-                  >
-                    <Check size={16} className="mr-1" /> Approve
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="flex-1"
-                    onClick={() => setAction("reject")}
-                    disabled={action === "reject"}
-                  >
-                    <X size={16} className="mr-1" /> Reject
-                  </Button>
-                </div>
-
-                {action && (
-                  <Button onClick={handleAction} isLoading={processing} className="w-full" disabled={action === "reject" && !reason.trim()}>
-                    Confirm {action === "approve" ? "Approval" : "Rejection"}
-                  </Button>
-                )}
+                <Button
+                  className="w-full"
+                  onClick={() => setShowApproveModal(true)}
+                >
+                  <ShieldCheck size={16} className="mr-2" /> Approve Payment
+                </Button>
+                <Button
+                  variant="danger"
+                  className="w-full"
+                  onClick={() => setShowRejectModal(true)}
+                >
+                  <Ban size={16} className="mr-2" /> Reject Payment
+                </Button>
               </div>
             ) : (
               <p className="text-sm text-charcoal-muted">
@@ -229,6 +214,57 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
           </Card>
         </div>
       </div>
+
+      {/* Approve Modal */}
+      <Modal isOpen={showApproveModal} onClose={() => setShowApproveModal(false)} title="Confirm Approval">
+        <div className="space-y-4">
+          <p className="text-sm text-charcoal-muted">
+            Are you sure you want to approve this payment? This will activate the student's enrollment and grant access to the course.
+          </p>
+          <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
+            <div className="flex justify-between"><span className="text-charcoal-muted">Student:</span><span className="font-medium text-charcoal">{payment.studentName}</span></div>
+            <div className="flex justify-between"><span className="text-charcoal-muted">Course:</span><span className="font-medium text-charcoal">{payment.courseTitle}</span></div>
+            <div className="flex justify-between"><span className="text-charcoal-muted">Amount:</span><span className="font-medium text-charcoal">{payment.amount} {payment.currency}</span></div>
+          </div>
+          {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
+          <div className="flex gap-3 pt-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setShowApproveModal(false)}>Cancel</Button>
+            <Button className="flex-1" isLoading={processing} onClick={handleApprove}>
+              <Check size={16} className="mr-2" /> Confirm Approval
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reject Modal */}
+      <Modal isOpen={showRejectModal} onClose={() => setShowRejectModal(false)} title="Confirm Rejection">
+        <div className="space-y-4">
+          <p className="text-sm text-charcoal-muted">
+            Are you sure you want to reject this payment? The student will not gain access to the course.
+          </p>
+          <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
+            <div className="flex justify-between"><span className="text-charcoal-muted">Student:</span><span className="font-medium text-charcoal">{payment.studentName}</span></div>
+            <div className="flex justify-between"><span className="text-charcoal-muted">Course:</span><span className="font-medium text-charcoal">{payment.courseTitle}</span></div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-1">Rejection Reason *</label>
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500 resize-none"
+              placeholder="Explain why this is rejected..."
+            />
+          </div>
+          {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
+          <div className="flex gap-3 pt-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setShowRejectModal(false)}>Cancel</Button>
+            <Button variant="danger" className="flex-1" isLoading={processing} onClick={handleReject}>
+              <X size={16} className="mr-2" /> Confirm Rejection
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

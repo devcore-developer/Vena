@@ -107,12 +107,21 @@ export async function calculateCourseProgress(
           lessons: { where: { isPublished: true } },
         },
       },
+      // إضافة جلب الدروس المستقلة المنشورة
+      lessons: {
+        where: { isPublished: true, sectionId: null },
+      },
     },
   });
 
   if (!course) return 0;
 
-  const allLessons = course.sections.flatMap((s) => s.lessons);
+  // دمج الدروس من الأقسام والدروس المستقلة
+  const allLessons = [
+    ...course.sections.flatMap((s) => s.lessons),
+    ...course.lessons,
+  ];
+
   if (allLessons.length === 0) return 0;
 
   const lessonIds = allLessons.map((l) => l.id);

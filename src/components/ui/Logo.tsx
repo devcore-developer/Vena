@@ -25,7 +25,7 @@ export function Logo({
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 overflow-hidden rounded-lg">
         <Image
           src="/logo.png"
           alt="VENA Logo"

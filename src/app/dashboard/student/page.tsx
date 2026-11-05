@@ -1,23 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { BookOpen, Clock, CheckCircle, PlayCircle } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+
 export default function StudentDashboard() {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/student/enrollments")
+    // Changed to /api/student/courses to get accurate progress data
+    fetch("/api/student/courses")
       .then(res => res.json())
       .then(data => {
-        setEnrollments(data);
+        setEnrollments(Array.isArray(data) ? data : []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />;
@@ -28,7 +29,7 @@ export default function StudentDashboard() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-charcoal">Welcome back, John</h1>
+        <h1 className="text-2xl font-bold text-charcoal">Welcome back</h1>
         <p className="text-charcoal-muted mt-1">Continue your learning journey.</p>
       </div>
 
@@ -95,14 +96,14 @@ export default function StudentDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {activeCourses.map(enr => (
-              <Card key={enr.id} className="flex gap-4">
-                <div className={`w-24 h-24 rounded-lg ${enr.course?.thumbnailColor} flex-shrink-0`}></div>
+              <Card key={enr.enrollmentId} className="flex gap-4">
+                <div className={`w-24 h-24 rounded-lg ${enr.course?.thumbnailColor || "bg-vena-500"} flex-shrink-0`}></div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-charcoal">{enr.course?.title}</h3>
                   <p className="text-sm text-charcoal-muted mb-2">{enr.course?.doctorName}</p>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full">
-                      <div className="h-full bg-vena-500 rounded-full" style={{ width: `${enr.progress}%` }}></div>
+                      <div className="h-full bg-vena-500 rounded-full transition-all duration-500" style={{ width: `${enr.progress}%` }}></div>
                     </div>
                     <span className="text-xs font-medium text-charcoal-muted">{enr.progress}%</span>
                   </div>

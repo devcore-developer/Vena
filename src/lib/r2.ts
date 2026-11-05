@@ -8,13 +8,13 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "vena-media";
+export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "vena-media";
 
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
   console.warn("[R2] Missing required environment variables. Storage will not function.");
 }
 
-const s3Client = new S3Client({
+export const s3Client = new S3Client({
   region: "auto",
   endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
@@ -57,12 +57,12 @@ export async function uploadToR2(
 export async function generatePresignedUploadUrl(
   objectKey: string,
   mimeType: string,
-  expiresIn: number = 300 // 5 minutes
+  expiresIn: number = 300
 ): Promise<string> {
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: objectKey,
-    ContentType: mimeType,
+    ContentType: mimeType, // رجعنا الـ ContentType
   });
 
   return getSignedUrl(s3Client, command, { expiresIn });
@@ -70,16 +70,17 @@ export async function generatePresignedUploadUrl(
 
 export async function generatePresignedDownloadUrl(
   objectKey: string,
-  expiresIn: number = 3600 // 1 hour for playback
+  expiresIn: number = 3600
 ): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: objectKey,
+    // شيلنا الـ ResponseContentDisposition و ResponseContentType
+    // عشان نسمح للـ Range requests إنها تشتغل من غير مشاكل في التوقيع
   });
 
   return getSignedUrl(s3Client, command, { expiresIn });
 }
-
 export async function deleteFromR2(objectKey: string): Promise<void> {
   const command = new DeleteObjectCommand({
     Bucket: R2_BUCKET_NAME,

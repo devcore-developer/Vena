@@ -46,10 +46,11 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
       if (!res.ok) throw new Error("Failed to get upload URL");
       const { mediaId, uploadUrl } = await res.json();
 
+      // 2. Upload to R2 directly using PUT
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl, true);
-        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.setRequestHeader("Content-Type", file.type); // رجعنا الـ Content-Type
         
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
@@ -59,15 +60,15 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
         };
         
         xhr.onload = () => {
-          if (xhr.status === 200) {
+          if (xhr.status === 200 || xhr.status === 201) {
             setUploadProgress(100);
             resolve();
           } else {
-            reject(new Error("Upload failed"));
+            reject(new Error(`Upload failed with status ${xhr.status}`));
           }
         };
         
-        xhr.onerror = () => reject(new Error("Upload error"));
+        xhr.onerror = () => reject(new Error("Network error during upload"));
         xhr.send(file);
       });
 

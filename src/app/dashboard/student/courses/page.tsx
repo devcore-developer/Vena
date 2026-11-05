@@ -133,7 +133,7 @@ export default function StudentCoursesPage() {
                     <span className="text-xs font-semibold text-charcoal">{c.progress}%</span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full">
-                    <div className="h-full bg-vena-500 rounded-full transition-all" style={{ width: `${c.progress}%` }} />
+                    <div className="h-full bg-vena-500 rounded-full transition-all duration-500" style={{ width: `${c.progress}%` }} />
                   </div>
                 </div>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/auth-utils";
-import { getProgressForEnrollments } from "@/lib/enrollment";
+import { calculateCourseProgress } from "@/lib/enrollment";
 
 export async function GET() {
   const auth = await requireStudent();
@@ -34,35 +34,43 @@ export async function GET() {
   });
 
   // Filter out any enrollments for courses that don't match the student's year
-  // (defensive measure — should never happen if enrollment flow is correct)
   const validEnrollments = enrollments.filter(
     (e) => !e.course.targetYear || e.course.targetYear === user.academicYear
   );
 
-  const courseIds = validEnrollments.map((e) => e.courseId);
-  const progressMap = await getProgressForEnrollments(
-    auth.session.userId,
-    courseIds
-  );
+  const data = await Promise.all(
+    validEnrollments.map(async (enr) => {
+      // Calculate progress dynamically to ensure it's always accurate
+      const progress = await calculateCourseProgress(auth.session.userId, enr.courseId);
 
-  const data = validEnrollments.map((enr) => ({
-    enrollmentId: enr.id,
-    status: enr.status,
-    enrolledAt: enr.enrolledAt.toISOString(),
-    progress: progressMap[enr.courseId] ?? enr.progress,
-    course: {
-      id: enr.course.id,
-      title: enr.course.title,
-      slug: enr.course.slug,
-      shortDescription: enr.course.shortDescription,
-      doctorName: enr.course.doctor.name,
-      thumbnailColor: enr.course.thumbnailColor,
-      price: enr.course.price.toNumber(),
-      isFree: enr.course.price.toNumber() === 0,
-      level: enr.course.level,
-      language: enr.course.language,
-    },
-  }));
+      // Update enrollment progress in DB if it changed (fixes 0% issue)
+      if (progress !== enr.progress) {
+        await prisma.enrollment.update({
+          where: { id: enr.id },
+          data: { progress },
+        });
+      }
+
+      return {
+        enrollmentId: enr.id,
+        status: enr.status,
+        enrolledAt: enr.enrolledAt.toISOString(),
+        progress: progress,
+        course: {
+          id: enr.course.id,
+          title: enr.course.title,
+          slug: enr.course.slug,
+          shortDescription: enr.course.shortDescription,
+          doctorName: enr.course.doctor.name,
+          thumbnailColor: enr.course.thumbnailColor,
+          price: enr.course.price.toNumber(),
+          isFree: enr.course.price.toNumber() === 0,
+          level: enr.course.level,
+          language: enr.course.language,
+        },
+      };
+    })
+  );
 
   return NextResponse.json(data);
 }

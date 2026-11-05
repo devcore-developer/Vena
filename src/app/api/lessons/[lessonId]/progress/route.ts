@@ -58,6 +58,7 @@ export async function POST(
       );
     }
 
+    // 1. Update or create lesson progress
     await prisma.lessonProgress.upsert({
       where: {
         studentId_lessonId: {
@@ -77,11 +78,13 @@ export async function POST(
       },
     });
 
+    // 2. Recalculate course progress
     const progress = await calculateCourseProgress(
       auth.session.userId,
       courseId
     );
 
+    // 3. Update enrollment with new progress and status if 100%
     await prisma.enrollment.update({
       where: { id: enrollment.id },
       data: {
@@ -98,7 +101,8 @@ export async function POST(
       courseProgress: progress,
       enrollmentStatus: progress === 100 ? "COMPLETED" : enrollment.status,
     });
-  } catch {
+  } catch (error) {
+    console.error("[PROGRESS_UPDATE_ERROR]", error);
     return NextResponse.json(
       { error: "Failed to update progress" },
       { status: 500 }

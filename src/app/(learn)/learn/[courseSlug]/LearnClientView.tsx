@@ -31,17 +31,20 @@ interface Course {
   description?: string;
   doctorName: string;
   sections: Section[];
+  lessons?: Lesson[];
   enrollment: { id: string; status: string; progress: number };
 }
 
-// استخدمنا studentName كـ prop
 export default function LearnClientView({ course, studentName }: { course: Course; studentName: string }) {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(
-    course.sections[0]?.lessons[0] || null
+    course.sections[0]?.lessons[0] || course.lessons?.[0] || null
   );
   const [completedMap, setCompletedMap] = useState<Record<string, boolean>>(
     Object.fromEntries(
-      course.sections.flatMap((s) => s.lessons.map((l) => [l.id, l.isCompleted]))
+      [
+        ...course.sections.flatMap((s) => s.lessons.map((l) => [l.id, l.isCompleted] as [string, boolean])),
+        ...(course.lessons || []).map((l) => [l.id, l.isCompleted] as [string, boolean])
+      ]
     )
   );
 
@@ -58,8 +61,13 @@ export default function LearnClientView({ course, studentName }: { course: Cours
     }
   };
 
-  const totalLessons = course.sections.reduce((sum, s) => sum + s.lessons.length, 0);
-  const completedLessons = Object.values(completedMap).filter(Boolean).length;
+  const allLessons = [
+    ...course.sections.flatMap((s) => s.lessons),
+    ...(course.lessons || [])
+  ];
+  
+  const totalLessons = allLessons.length;
+  const completedLessons = allLessons.filter(l => completedMap[l.id]).length;
   const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
   return (
@@ -89,7 +97,6 @@ export default function LearnClientView({ course, studentName }: { course: Cours
 
               {activeLesson.type === "VIDEO" && activeLesson.mediaId ? (
                 <div className="mb-4">
-                  {/* بنمرر اسم الطالب هنا */}
                   <VideoPlayer mediaId={activeLesson.mediaId} studentName={studentName} />
                 </div>
               ) : activeLesson.type === "VIDEO" && activeLesson.resourceUrl ? (
@@ -135,6 +142,7 @@ export default function LearnClientView({ course, studentName }: { course: Cours
               <h3 className="font-semibold text-charcoal">Course Content</h3>
             </div>
             <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+              {/* Display Sections */}
               {course.sections.map((section) => (
                 <div key={section.id} className="border-b border-vena-50 last:border-0">
                   <div className="p-3 bg-vena-50/50">
@@ -160,6 +168,33 @@ export default function LearnClientView({ course, studentName }: { course: Cours
                   </div>
                 </div>
               ))}
+
+              {/* Display Sectionless Lessons */}
+              {course.lessons && course.lessons.length > 0 && (
+                <div className="border-b border-vena-50 last:border-0">
+                  <div className="p-3 bg-vena-50/50">
+                    <h4 className="text-sm font-semibold text-charcoal">General Lessons</h4>
+                  </div>
+                  <div className="divide-y divide-vena-50">
+                    {course.lessons.map((lesson) => {
+                      const Icon = lesson.type === "VIDEO" ? Video : FileText;
+                      return (
+                        <button
+                          key={lesson.id}
+                          onClick={() => setActiveLesson(lesson)}
+                          className={`w-full text-left p-3 flex items-center gap-3 hover:bg-vena-50/50 transition ${
+                            activeLesson?.id === lesson.id ? "bg-vena-50" : ""
+                          }`}
+                        >
+                          <Icon size={16} className="text-charcoal-muted flex-shrink-0" />
+                          <span className="text-sm text-charcoal flex-1">{lesson.title}</span>
+                          {completedMap[lesson.id] && <CheckCircle size={14} className="text-vena-500" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>

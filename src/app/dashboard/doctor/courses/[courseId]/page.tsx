@@ -5,39 +5,10 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Plus, ArrowLeft, BookOpen, FileText, Save, Eye, EyeOff } from "lucide-react";
-import { CourseStatus } from "@/types";
 import Link from "next/link";
+import { CourseStatus } from "@/types";
 
 export const metadata = { title: "Manage Course" };
-
-interface CourseData {
-  id: string;
-  title: string;
-  slug: string;
-  description: string | null;
-  shortDescription: string | null;
-  price: number;
-  status: string;
-  level: string;
-  language: string;
-  thumbnailColor: string | null;
-  targetYear: string | null;
-  category: { name: string } | null;
-  sections: Array<{
-    id: string;
-    title: string;
-    order: number;
-    lessons: Array<{
-      id: string;
-      title: string;
-      type: string;
-      order: number;
-      isPreview: boolean;
-      isPublished: boolean;
-      mediaId: string | null;
-    }>;
-  }>;
-}
 
 export default async function CourseManagementPage({
   params,
@@ -52,8 +23,8 @@ export default async function CourseManagementPage({
   const course = await prisma.course.findUnique({
     where: { id: params.courseId },
     include: {
-      category: { select: { name: true } }, // تأكد إنها موجودة
-      sections: { // تأكد إنها موجودة
+      category: { select: { name: true } },
+      sections: {
         include: {
           lessons: {
             select: {
@@ -70,6 +41,20 @@ export default async function CourseManagementPage({
         },
         orderBy: { order: "asc" },
       },
+      // Add this to fetch sectionless lessons
+      lessons: {
+        where: { sectionId: null },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          order: true,
+          isPreview: true,
+          isPublished: true,
+          mediaId: true,
+        },
+        orderBy: { order: "asc" },
+      },
     },
   });
 
@@ -78,35 +63,7 @@ export default async function CourseManagementPage({
     notFound();
   }
 
-  // Serialize for client component usage if needed
-  const serializedCourse: CourseData = {
-    id: course.id,
-    title: course.title,
-    slug: course.slug,
-    description: course.description,
-    shortDescription: course.shortDescription,
-    price: course.price.toNumber(),
-    status: course.status,
-    level: course.level,
-    language: course.language,
-    thumbnailColor: course.thumbnailColor,
-    targetYear: course.targetYear,
-    category: course.category,
-    sections: course.sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      order: s.order,
-      lessons: s.lessons.map((l) => ({
-        id: l.id,
-        title: l.title,
-        type: l.type,
-        order: l.order,
-        isPreview: l.isPreview,
-        isPublished: l.isPublished,
-        mediaId: l.mediaId,
-      })),
-    })),
-  };
+  const isPublished = course.status === "PUBLISHED";
 
   return (
     <div>
@@ -131,7 +88,6 @@ export default async function CourseManagementPage({
           </p>
         </div>
         <div className="flex gap-2">
-          {/* Publish/Unpublish Button */}
           <PublishButton courseId={course.id} currentStatus={course.status} />
         </div>
       </div>
@@ -171,7 +127,8 @@ export default async function CourseManagementPage({
       </div>
 
       <div className="space-y-4">
-        {serializedCourse.sections.length === 0 ? (
+        {/* Check if both sections and sectionless lessons are empty */}
+        {course.sections.length === 0 && course.lessons.length === 0 ? (
           <Card className="p-8 text-center">
             <BookOpen className="mx-auto text-charcoal-muted opacity-50 mb-3" size={40} />
             <p className="text-charcoal-muted text-sm">
@@ -186,27 +143,61 @@ export default async function CourseManagementPage({
             </Button>
           </Card>
         ) : (
-          serializedCourse.sections.map((section, idx) => (
-            <Card key={section.id} noPadding>
-              <div className="p-4 bg-vena-50/30 border-b border-vena-50">
-                <h3 className="font-semibold text-charcoal text-sm">
-                  Section {idx + 1}: {section.title}
-                </h3>
-              </div>
-              <div className="divide-y divide-vena-50">
-                {section.lessons.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-charcoal-muted">
-                    No lessons in this section yet.
-                  </div>
-                ) : (
-                  section.lessons.map((lesson) => (
-                    <div key={lesson.id} className="p-4 flex items-center gap-3">
-                      <div className="p-2 bg-vena-50 rounded-lg flex-shrink-0">
+          <>
+            {/* Render Sections */}
+            {course.sections.map((section, idx) => (
+              <Card key={section.id} noPadding>
+                <div className="p-4 bg-vena-50/30 border-b border-vena-50">
+                  <h3 className="font-semibold text-charcoal text-sm">
+                    Section {idx + 1}: {section.title}
+                  </h3>
+                </div>
+                <div className="divide-y divide-vena-50">
+                  {section.lessons.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-charcoal-muted">
+                      No lessons in this section yet.
+                    </div>
+                  ) : (
+                    section.lessons.map((lesson) => (
+                      <div key={lesson.id} className="p-4 flex items-center gap-3">
+                        <div className="p-2 bg-vena-50 rounded-lg flex-shrink-0">
                         {lesson.type === "VIDEO" ? (
                           <BookOpen size={16} className="text-vena-600" />
                         ) : (
                           <FileText size={16} className="text-vena-600" />
                         )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-charcoal">{lesson.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="info">{lesson.type}</Badge>
+                            {lesson.isPreview && <Badge variant="success">Preview</Badge>}
+                            {!lesson.isPublished && <Badge variant="warning">Draft</Badge>}
+                            {lesson.mediaId && <Badge variant="default">Video Linked</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            ))}
+
+            {/* Render Sectionless Lessons (if any) */}
+            {course.lessons.length > 0 && (
+              <Card noPadding>
+                <div className="p-4 bg-vena-50/30 border-b border-vena-50">
+                  <h3 className="font-semibold text-charcoal text-sm">General Lessons</h3>
+                </div>
+                <div className="divide-y divide-vena-50">
+                  {course.lessons.map((lesson) => (
+                    <div key={lesson.id} className="p-4 flex items-center gap-3">
+                      <div className="p-2 bg-vena-50 rounded-lg flex-shrink-0">
+                      {lesson.type === "VIDEO" ? (
+                        <BookOpen size={16} className="text-vena-600" />
+                      ) : (
+                        <FileText size={16} className="text-vena-600" />
+                      )}
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-charcoal">{lesson.title}</p>
@@ -218,11 +209,11 @@ export default async function CourseManagementPage({
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          ))
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -248,18 +239,19 @@ function PublishButton({
         const { redirect } = await import("next/navigation");
 
         const session = await getValidSession();
-        if (!session || session.role !== "DOCTOR") redirect("/login");
-
-        // Add this line to tell TypeScript that session is definitely not null
-        const validSession = session!;
+        if (!session || session.role !== "DOCTOR") {
+          redirect("/login");
+          return; // Added return to satisfy TypeScript
+        }
 
         const course = await prisma.course.findUnique({
           where: { id: courseId },
           select: { doctorId: true },
         });
 
-        if (!course || course.doctorId !== validSession.userId) {
+        if (!course || course.doctorId !== session.userId) {
           redirect("/dashboard/doctor/courses");
+          return; // Added return to satisfy TypeScript
         }
 
         await prisma.course.update({

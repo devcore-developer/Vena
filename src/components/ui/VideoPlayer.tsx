@@ -9,49 +9,21 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
-  const [playbackType, setPlaybackType] = useState<"expirable" | "iframe" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchUrl = async () => {
-      try {
-        // Try StreamVault secure playback first
-        const res = await fetch(`/api/media/${mediaId}/streamvault-playback`);
+    // التحقق من إن الفيديو متاح للتشغيل قبل تحميله
+    fetch(`/api/media/${mediaId}/stream`, { method: "HEAD" })
+      .then((res) => {
         if (!res.ok) {
-          // Fall back to R2 playback
-          const r2Res = await fetch(`/api/media/${mediaId}/playback`);
-          if (!r2Res.ok) {
-            const data = await r2Res.json();
-            throw new Error(data.error || "Failed to load video");
-          }
-          const r2Data = await r2Res.json();
-          if (isMounted) {
-            setPlaybackUrl(r2Data.url);
-            setPlaybackType("expirable");
-          }
-        } else {
-          const data = await res.json();
-          if (isMounted) {
-            setPlaybackUrl(data.url);
-            setPlaybackType(data.type);
-          }
+          if (res.status === 404) throw new Error("Video is still processing or not available.");
+          if (res.status === 403) throw new Error("You do not have access to this video.");
+          throw new Error("Failed to load video.");
         }
-      } catch (e: any) {
-        if (isMounted) setError(e.message);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchUrl();
-
-    return () => {
-      isMounted = false;
-    };
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [mediaId]);
 
   if (loading) {
@@ -65,37 +37,17 @@ export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
   if (error) {
     return (
       <div className="aspect-video bg-slate-100 rounded-lg flex flex-col items-center justify-center text-center p-4">
-        <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
+        <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
         <p className="text-sm text-charcoal-muted">{error}</p>
       </div>
     );
   }
 
-  if (!playbackUrl) return null;
-
-  // StreamVault iframe embed (DRM-protected)
-  if (playbackType === "iframe") {
-    return (
-      <div className="aspect-video bg-black rounded-lg overflow-hidden">
-        <iframe
-          src={playbackUrl}
-          className="w-full h-full"
-          allowFullScreen
-          allow="encrypted-media; fullscreen; picture-in-picture"
-          style={{ border: "0" }}
-        />
-      </div>
-    );
-  }
-
-  // Direct video URL (R2 or expirable StreamVault link)
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
       <video
-        src={playbackUrl}
+        src={`/api/media/${mediaId}/stream`}
         controls
-        controlsList="nodownload noremoteplayback noplaybackrate"
-        disablePictureInPicture
         className="w-full h-full"
         onContextMenu={(e) => e.preventDefault()}
       />
