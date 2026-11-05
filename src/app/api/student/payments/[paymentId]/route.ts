@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/auth-utils";
-import { promises as fs } from "fs";
-import path from "path";
-import crypto from "crypto";
+import { uploadToR2, generateObjectKey } from "@/lib/r2";
+import { createNotification } from "@/lib/notifications";
 
-const RECEIPT_DIR = path.join(process.cwd(), "private", "receipts");
 const ALLOWED_RECEIPT_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const MAX_RECEIPT_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -68,7 +66,6 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Allow upload for AWAITING_PAYMENT, PENDING (resubmit), and REJECTED
     if (!["AWAITING_PAYMENT", "PENDING", "REJECTED"].includes(payment.status)) {
       return NextResponse.json(
         { error: `Cannot upload receipt for a payment with status: ${payment.status}` },
@@ -85,7 +82,6 @@ export async function POST(
       return NextResponse.json({ error: "Receipt file is required" }, { status: 400 });
     }
 
-    // Validate file type
     if (!ALLOWED_RECEIPT_TYPES.includes(file.type)) {
       return NextResponse.json(
         { error: `Invalid file type: ${file.type}. Accepted: JPEG, PNG, WebP, PDF` },
@@ -93,27 +89,22 @@ export async function POST(
       );
     }
 
-    // Validate file size
     if (file.size > MAX_RECEIPT_SIZE) {
       return NextResponse.json(
-        { error: `File exceeds maximum size of 10MB. Your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB` },
+        { error: `File exceeds maximum size of 10MB` },
         { status: 400 }
       );
     }
 
-    // Save to private directory
-    await fs.mkdir(RECEIPT_DIR, { recursive: true });
-    const fileExt = file.name.split(".").pop() || "jpg";
-    const safeName = crypto.randomBytes(16).toString("hex");
-    const filename = `${payment.id}-${safeName}.${fileExt}`;
-    const filepath = path.join(RECEIPT_DIR, filename);
-
+    // رفع الإيصال على Cloudflare R2 بدلاً من Local File System
+    const ext = file.name.split(".").pop() || "jpg";
+    const objectKey = generateObjectKey(payment.courseId, "receipts", payment.id, ext);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(filepath, buffer);
+    
+    const uploadResult = await uploadToR2(buffer, objectKey, file.type);
+    const proofPath = uploadResult.objectKey; // تخزين الـ Object Key في الداتابيز
 
-    const proofPath = `/private/receipts/${filename}`;
-
-    // Update payment record
+    // تحديث سجل الدفع بالـ Object Key بتاع الإيصال
     await prisma.payment.update({
       where: { id: params.paymentId },
       data: {
@@ -139,7 +130,7 @@ export async function POST(
       },
     });
 
-    // Notify Super Admin
+    // إرسال إشعار للأدمن
     const admins = await prisma.user.findMany({
       where: { role: "SUPER_ADMIN", status: "ACTIVE" },
       select: { id: true },
@@ -199,7 +190,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Only allow cancellation of AWAITING_PAYMENT or PENDING payments
     if (!["AWAITING_PAYMENT", "PENDING"].includes(payment.status)) {
       return NextResponse.json(
         { error: `Cannot cancel a payment with status: ${payment.status}` },
@@ -226,6 +216,3 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to cancel payment" }, { status: 500 });
   }
 }
-
-// Import createNotification at the top
-import { createNotification } from "@/lib/notifications";

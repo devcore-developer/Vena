@@ -126,13 +126,18 @@ export async function getObjectMetadata(objectKey: string): Promise<{
 // Object Key Generation (safe, no path traversal)
 // ============================================================
 
-export function generateObjectKey(courseId: string, kind: "previews" | "lectures", mediaId: string, extension: string): string {
+// ============================================================
+// Object Key Generation (safe, no path traversal)
+// ============================================================
+
+export function generateObjectKey(courseId: string, folder: string, mediaId: string, extension: string): string {
   // Sanitize inputs to prevent path manipulation
   const safeCourseId = courseId.replace(/[^a-zA-Z0-9-]/g, "");
   const safeMediaId = mediaId.replace(/[^a-zA-Z0-9-]/g, "");
+  const safeFolder = folder.replace(/[^a-zA-Z0-9-]/g, "");
   const safeExt = extension.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
-  return `courses/${safeCourseId}/${kind}/${safeMediaId}.${safeExt}`;
+  return `courses/${safeCourseId}/${safeFolder}/${safeMediaId}.${safeExt}`;
 }
 // ضيف ده في آخر ملف r2.ts
 export async function getPublicUrl(objectKey: string): Promise<string> {
