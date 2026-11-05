@@ -98,6 +98,7 @@ export async function requireRole(
 }
 
 /** Require DOCTOR or SECRETARY with a specific permission */
+/** Require DOCTOR or SECRETARY with a specific permission */
 export async function requireDoctorAccess(
   permission: Permission
 ): Promise<AuthResult> {

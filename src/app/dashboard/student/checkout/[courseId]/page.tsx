@@ -139,23 +139,38 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
   const handleCreatePayment = async () => {
     setSubmitting(true);
     setError("");
+
     try {
       const res = await fetch("/api/student/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId: params.courseId, method: selectedMethod }),
+        body: JSON.stringify({
+          courseId: params.courseId,
+          method: selectedMethod,
+        }),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to initiate payment");
+
+      if (!res.ok) {
+        setError(data.error || "Failed to initiate payment");
+        setSubmitting(false);
+        return;
+      }
+
+      // If existing payment, show info message but proceed to step 2
+      if (data.existing) {
+        // Don't show error, just proceed to receipt upload
+      }
+
       setPayment(data);
       setStep(2);
-    } catch (e: any) {
-      setError(e.message || "Something went wrong");
-    } finally {
-      setSubmitting(false);
+    } catch {
+      setError("Something went wrong");
     }
+    setSubmitting(false);
   };
-
+  
   const handleUploadReceipt = async () => {
     if (!payment || !receiptFile) return;
     setSubmitting(true);

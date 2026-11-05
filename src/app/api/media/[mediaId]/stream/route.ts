@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireStudent } from "@/lib/auth-utils";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client, R2_BUCKET_NAME } from "@/lib/r2";
+import { Readable } from "stream";
 
-export const dynamic = 'force-dynamic'; // منع التخزين المؤقت
+export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
@@ -18,7 +19,7 @@ export async function GET(
   });
 
   if (!media) {
-    return NextResponse.json({ error: "Media not found or not ready" }, { status: 404 });
+    return new NextResponse("Media not found or not ready", { status: 404 });
   }
 
   // Authorization
@@ -35,23 +36,28 @@ export async function GET(
     });
 
     if (!user?.academicYear || (media.course.targetYear && user.academicYear !== media.course.targetYear)) {
-      return NextResponse.json({ error: "Year mismatch" }, { status: 403 });
+      return new NextResponse("Year mismatch", { status: 403 });
     }
 
     const enrollment = await prisma.enrollment.findUnique({
-      where: { studentId_courseId: { studentId: auth.session.userId, courseId: media.courseId } },
+      where: {
+        studentId_courseId: {
+          studentId: auth.session.userId,
+          courseId: media.courseId,
+        },
+      },
       select: { status: true },
     });
 
     if (!enrollment || (enrollment.status !== "ACTIVE" && enrollment.status !== "COMPLETED")) {
-      return NextResponse.json({ error: "Enrollment required" }, { status: 403 });
+      return new NextResponse("Enrollment required", { status: 403 });
     }
   }
 
   // Stream Video from R2
   try {
     const range = req.headers.get("range");
-    
+
     const command = new GetObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: media.objectKey,
@@ -62,31 +68,42 @@ export async function GET(
 
     const headers = new Headers();
     headers.set("Content-Type", response.ContentType || "video/mp4");
-    
+    headers.set("Accept-Ranges", "bytes");
+
     if (response.ContentLength) {
       headers.set("Content-Length", response.ContentLength.toString());
     }
-    
+
     if (range && response.ContentRange) {
       headers.set("Content-Range", response.ContentRange);
-      headers.set("Accept-Ranges", "bytes");
     }
 
     if (!response.Body) {
-      return NextResponse.json({ error: "Stream error" }, { status: 500 });
+      return new NextResponse("Stream error", { status: 500 });
     }
 
-    const stream = response.Body as ReadableStream<Uint8Array>;
+    // Convert NodeJS.ReadableStream to Web ReadableStream
+    const nodeStream = response.Body as Readable;
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on("data", (chunk) => {
+          controller.enqueue(new Uint8Array(chunk));
+        });
+        nodeStream.on("end", () => {
+          controller.close();
+        });
+        nodeStream.on("error", (err) => {
+          controller.error(err);
+        });
+      },
+    });
 
-    return new NextResponse(stream, {
+    return new NextResponse(webStream, {
       status: range ? 206 : 200,
       headers,
     });
   } catch (error: any) {
     console.error("[STREAM_ERROR]", error);
-    return NextResponse.json(
-      { error: "Failed to stream video" },
-      { status: 500 }
-    );
+    return new NextResponse("Failed to stream video", { status: 500 });
   }
 }

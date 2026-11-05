@@ -125,7 +125,7 @@ export default function StudentCoursesPage() {
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="text-lg font-semibold text-charcoal">{c.course.title}</h3>
                 <p className="text-sm text-charcoal-muted mt-1">{c.course.doctorName}</p>
-                <p className="text-xs text-charcoal-muted mt-1">{c.course.level} • {c.course.language}</p>
+                <p className="text-xs text-charcoal-muted mt-1">{c.course.language}</p>
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-1">

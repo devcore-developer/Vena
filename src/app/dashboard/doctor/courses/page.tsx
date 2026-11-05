@@ -40,7 +40,6 @@ export default function DoctorCoursesPage() {
     shortDescription: "",
     categoryId: "",
     price: "",
-    level: "BEGINNER",
     language: "ENGLISH",
     targetYear: "YEAR_1",
   });
@@ -79,7 +78,7 @@ export default function DoctorCoursesPage() {
     });
     if (res.ok) {
       setShowCreate(false);
-      setForm({ title: "", shortDescription: "", categoryId: "", price: "", level: "BEGINNER", language: "ENGLISH", targetYear: "YEAR_1" });
+      setForm({ title: "", shortDescription: "", categoryId: "", price: "", language: "ENGLISH", targetYear: "YEAR_1" });
       await fetchCourses();
     }
     setCreating(false);
@@ -229,18 +228,6 @@ export default function DoctorCoursesPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Level</label>
-              <select
-                value={form.level}
-                onChange={e => setForm({ ...form, level: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
-              >
-                <option value="BEGINNER">Beginner</option>
-                <option value="INTERMEDIATE">Intermediate</option>
-                <option value="ADVANCED">Advanced</option>
-              </select>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-charcoal mb-1">Language</label>
               <select
                 value={form.language}
@@ -251,20 +238,18 @@ export default function DoctorCoursesPage() {
                 <option value="ARABIC">Arabic</option>
               </select>
             </div>
-          </div>
-          
-          {/* Target Academic Year */}
-          <div>
-            <label className="block text-sm font-medium text-charcoal mb-1">Target Academic Year</label>
-            <select
-              value={form.targetYear}
-              onChange={e => setForm({ ...form, targetYear: e.target.value })}
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
-            >
-              {ACADEMIC_YEARS.map(y => (
-                <option key={y.value} value={y.value}>{y.label}</option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-sm font-medium text-charcoal mb-1">Target Academic Year</label>
+              <select
+                value={form.targetYear}
+                onChange={e => setForm({ ...form, targetYear: e.target.value })}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
+              >
+                {ACADEMIC_YEARS.map(y => (
+                  <option key={y.value} value={y.value}>{y.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">

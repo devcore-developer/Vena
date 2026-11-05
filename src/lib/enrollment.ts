@@ -107,7 +107,6 @@ export async function calculateCourseProgress(
           lessons: { where: { isPublished: true } },
         },
       },
-      // إضافة جلب الدروس المستقلة المنشورة
       lessons: {
         where: { isPublished: true, sectionId: null },
       },
@@ -116,7 +115,6 @@ export async function calculateCourseProgress(
 
   if (!course) return 0;
 
-  // دمج الدروس من الأقسام والدروس المستقلة
   const allLessons = [
     ...course.sections.flatMap((s) => s.lessons),
     ...course.lessons,

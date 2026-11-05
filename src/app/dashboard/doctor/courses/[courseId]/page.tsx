@@ -83,7 +83,7 @@ export default async function CourseManagementPage({
             </Badge>
           </div>
           <p className="text-charcoal-muted mt-1 text-sm">
-            {course.category?.name || "Uncategorized"} • {course.level}
+            {course.category?.name || "Uncategorized"}
             {course.targetYear && ` • ${course.targetYear.replace("_", " ")}`}
           </p>
         </div>
@@ -94,7 +94,7 @@ export default async function CourseManagementPage({
 
       {/* Course Info Card */}
       <Card className="mb-6">
-        <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-xs text-charcoal-muted uppercase font-semibold">Price</p>
             <p className="text-lg font-semibold text-charcoal mt-1">
@@ -104,10 +104,6 @@ export default async function CourseManagementPage({
           <div>
             <p className="text-xs text-charcoal-muted uppercase font-semibold">Language</p>
             <p className="text-sm font-semibold text-charcoal mt-1">{course.language}</p>
-          </div>
-          <div>
-            <p className="text-xs text-charcoal-muted uppercase font-semibold">Level</p>
-            <p className="text-sm font-semibold text-charcoal mt-1">{course.level}</p>
           </div>
         </div>
         {course.description && (

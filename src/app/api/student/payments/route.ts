@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/auth-utils";
 import { getPaymentConfig, snapshotPaymentConfig, generatePaymentReference, getEnabledMethods } from "@/lib/paymentConfig";
+import { createNotification } from "@/lib/notifications";
 import type { PaymentMethod } from "@prisma/client";
 
 export async function GET() {
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Check for existing pending/awaiting payment (prevent duplicates)
+    // 3. Check for existing pending/awaiting payment — RESUME instead of blocking
     const existingPayment = await prisma.payment.findFirst({
       where: {
         studentId: auth.session.userId,
@@ -95,16 +96,33 @@ export async function POST(req: Request) {
     });
 
     if (existingPayment) {
-      return NextResponse.json(
-        {
-          error: "You already have a pending payment for this course. Please complete or cancel it first.",
-          existingPaymentId: existingPayment.id,
-        },
-        { status: 409 }
-      );
+      // Return the existing payment so student can resume
+      const config = await getPaymentConfig();
+      return NextResponse.json({
+        id: existingPayment.id,
+        referenceNumber: existingPayment.referenceNumber,
+        amount: existingPayment.amount.toNumber(),
+        currency: existingPayment.currency,
+        method: existingPayment.method,
+        status: existingPayment.status,
+        paymentConfigSnapshot: existingPayment.paymentConfigSnapshot,
+        createdAt: existingPayment.createdAt.toISOString(),
+        message: "You have an existing pending payment. Please upload your receipt to continue.",
+        existing: true,
+      });
     }
 
-    // 4. Validate payment method is enabled
+    // 4. Check for REJECTED payment — allow creating a new one
+    const rejectedPayment = await prisma.payment.findFirst({
+      where: {
+        studentId: auth.session.userId,
+        courseId,
+        status: "REJECTED",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 5. Validate payment method is enabled
     const config = await getPaymentConfig();
     const enabledMethods = getEnabledMethods(config);
 
@@ -115,15 +133,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Generate unique reference
+    // 6. Generate unique reference
     const referenceNumber = generatePaymentReference();
 
-    // 6. Snapshot payment config (so later changes don't affect this request)
+    // 7. Snapshot payment config
     const configSnapshot = snapshotPaymentConfig(config, method);
 
-    // 7. Create payment + enrollment atomically
+    // 8. Create payment + enrollment atomically
     const result = await prisma.$transaction(async (tx) => {
-      // Create or update enrollment to PENDING
       let enrollment = existingEnrollment;
       if (!enrollment) {
         enrollment = await tx.enrollment.create({
@@ -134,9 +151,14 @@ export async function POST(req: Request) {
             progress: 0,
           },
         });
+      } else if (enrollment.status === "CANCELLED" || enrollment.status === "SUSPENDED") {
+        // Reactivate enrollment
+        enrollment = await tx.enrollment.update({
+          where: { id: enrollment.id },
+          data: { status: "PENDING" },
+        });
       }
 
-      // Create payment with AWAITING_PAYMENT status (no receipt yet)
       const payment = await tx.payment.create({
         data: {
           studentId: auth.session.userId,
@@ -151,7 +173,6 @@ export async function POST(req: Request) {
         },
       });
 
-      // Audit log
       await tx.auditLog.create({
         data: {
           actorId: auth.session.userId,
@@ -174,7 +195,8 @@ export async function POST(req: Request) {
       paymentConfigSnapshot: result.paymentConfigSnapshot,
       createdAt: result.createdAt.toISOString(),
     });
-  } catch {
+  } catch (error) {
+    console.error("[PAYMENT_CREATION_ERROR]", error);
     return NextResponse.json(
       { error: "Failed to create payment request" },
       { status: 500 }
