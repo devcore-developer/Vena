@@ -32,7 +32,13 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
   const [loading, setLoading] = useState(true);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [reason, setReason] = useState("");
+  
+  // Revenue split state
+  const [doctorEarnings, setDoctorEarnings] = useState<number>(0);
+  const [platformEarnings, setPlatformEarnings] = useState<number>(0);
+  const [splitError, setSplitError] = useState("");
+  
+  const [rejectReason, setRejectReason] = useState("");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,18 +48,41 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
       .then((d) => {
         const found = (d.data || []).find((p: PaymentDetail) => p.id === params.paymentId);
         setPayment(found || null);
+        if (found) {
+          // Calculate default 90/10 split
+          const doctor = Math.round(found.amount * 0.9);
+          const platform = found.amount - doctor;
+          setDoctorEarnings(doctor);
+          setPlatformEarnings(platform);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [params.paymentId]);
 
+  const validateSplit = () => {
+    setSplitError("");
+    if (doctorEarnings < 0 || platformEarnings < 0) {
+      setSplitError("Amounts cannot be negative");
+      return false;
+    }
+    if (Math.abs(doctorEarnings + platformEarnings - (payment?.amount || 0)) > 0.01) {
+      setSplitError(`Doctor (${doctorEarnings}) + Platform (${platformEarnings}) must equal ${payment?.amount}`);
+      return false;
+    }
+    return true;
+  };
+
   const handleApprove = async () => {
+    if (!validateSplit()) return;
+    
     setProcessing(true);
     setError("");
     try {
       const res = await fetch(`/api/admin/payments/${payment!.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorEarnings, platformEarnings }),
       });
 
       if (!res.ok) {
@@ -72,7 +101,7 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
   };
 
   const handleReject = async () => {
-    if (!reason.trim()) {
+    if (!rejectReason.trim()) {
       setError("Rejection reason is required");
       return;
     }
@@ -82,7 +111,7 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
       const res = await fetch(`/api/admin/payments/${payment!.id}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rejectionReason: reason }),
+        body: JSON.stringify({ rejectionReason: rejectReason }),
       });
 
       if (!res.ok) {
@@ -215,21 +244,77 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
         </div>
       </div>
 
-      {/* Approve Modal */}
+      {/* Approve Modal with Revenue Split */}
       <Modal isOpen={showApproveModal} onClose={() => setShowApproveModal(false)} title="Confirm Approval">
         <div className="space-y-4">
           <p className="text-sm text-charcoal-muted">
-            Are you sure you want to approve this payment? This will activate the student&apos;s enrollment and grant access to the course.
+            Review the revenue split below. You can adjust the amounts before approving.
           </p>
           <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
-            <div className="flex justify-between"><span className="text-charcoal-muted">Student:</span><span className="font-medium text-charcoal">{payment.studentName}</span></div>
-            <div className="flex justify-between"><span className="text-charcoal-muted">Course:</span><span className="font-medium text-charcoal">{payment.courseTitle}</span></div>
-            <div className="flex justify-between"><span className="text-charcoal-muted">Amount:</span><span className="font-medium text-charcoal">{payment.amount} {payment.currency}</span></div>
+            <div className="flex justify-between">
+              <span className="text-charcoal-muted">Student:</span>
+              <span className="font-medium text-charcoal">{payment.studentName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-charcoal-muted">Course:</span>
+              <span className="font-medium text-charcoal">{payment.courseTitle}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-charcoal-muted">Total Amount:</span>
+              <span className="font-bold text-charcoal">{payment.amount} {payment.currency}</span>
+            </div>
           </div>
+
+          {/* Editable Revenue Split */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-charcoal mb-1">
+                Doctor Earnings (EGP)
+              </label>
+              <input
+                type="number"
+                value={doctorEarnings}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setDoctorEarnings(val);
+                  setPlatformEarnings(payment.amount - val);
+                  setSplitError("");
+                }}
+                className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-charcoal mb-1">
+                Platform Earnings (EGP)
+              </label>
+              <input
+                type="number"
+                value={platformEarnings}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setPlatformEarnings(val);
+                  setDoctorEarnings(payment.amount - val);
+                  setSplitError("");
+                }}
+                className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            {splitError && (
+              <div className="text-xs text-red-600">{splitError}</div>
+            )}
+            <div className="text-xs text-charcoal-muted text-center">
+              Doctor + Platform = {doctorEarnings + platformEarnings} EGP (must equal {payment.amount} EGP)
+            </div>
+          </div>
+
           {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
           <div className="flex gap-3 pt-2">
             <Button variant="secondary" className="flex-1" onClick={() => setShowApproveModal(false)}>Cancel</Button>
-            <Button className="flex-1" isLoading={processing} onClick={handleApprove}>
+            <Button className="flex-1" isLoading={processing} onClick={handleApprove} disabled={!!splitError}>
               <Check size={16} className="mr-2" /> Confirm Approval
             </Button>
           </div>
@@ -250,8 +335,8 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
             <label className="block text-sm font-medium text-charcoal mb-1">Rejection Reason *</label>
             <textarea
               rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
               className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500 resize-none"
               placeholder="Explain why this is rejected..."
             />

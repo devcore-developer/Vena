@@ -5,7 +5,9 @@ import LearnClientView from "./LearnClientView";
 
 export async function generateMetadata({ params }: { params: { courseSlug: string } }) {
   try {
-    const course = await prisma.course.findUnique({ where: { slug: params.courseSlug } });
+    const course = await prisma.course.findFirst({
+      where: { OR: [{ slug: params.courseSlug }, { id: params.courseSlug }] }
+    });
     return { title: course?.title || "Learn" };
   } catch {
     return { title: "Learn" };
@@ -19,27 +21,37 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   let course: any = null;
   try {
-    // 1. Try to find a PUBLISHED course
-    course = await prisma.course.findUnique({
-      where: { slug: params.courseSlug, status: "PUBLISHED" },
+    // Try to find by slug OR id
+    course = await prisma.course.findFirst({
+      where: {
+        OR: [
+          { slug: params.courseSlug },
+          { id: params.courseSlug }
+        ],
+        status: "PUBLISHED",
+      },
       include: {
         doctor: { select: { name: true } },
         sections: {
           include: { lessons: { where: { isPublished: true }, orderBy: { order: "asc" } } },
           orderBy: { order: "asc" },
         },
-        // جلب الدروس المستقلة المنشورة
         lessons: {
-          where: { sectionId: null, isPublished: true },
+          where: { isPublished: true, sectionId: null },
           orderBy: { order: "asc" },
         },
       },
     });
 
-    // 2. If not found, allow Doctors/Admins to preview their own DRAFT course
+    // If not found, allow doctors/admins to preview DRAFT course
     if (!course && (session.role === "DOCTOR" || session.role === "SUPER_ADMIN")) {
-      const draftCourse = await prisma.course.findUnique({
-        where: { slug: params.courseSlug },
+      const draftCourse = await prisma.course.findFirst({
+        where: {
+          OR: [
+            { slug: params.courseSlug },
+            { id: params.courseSlug }
+          ],
+        },
         include: {
           doctor: { select: { name: true } },
           sections: {
@@ -63,7 +75,7 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   if (!course) notFound();
 
-  // 3. Enrollment check (ONLY for students)
+  // Enrollment check for students
   if (session.role === "STUDENT") {
     const enrollment = await prisma.enrollment.findUnique({
       where: {
@@ -112,7 +124,6 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
         mediaId: l.mediaId || undefined,
       })),
     })),
-    // إرسال الدروس المستقلة للواجهة
     lessons: course.lessons.map((l: any) => ({
       id: l.id,
       title: l.title,

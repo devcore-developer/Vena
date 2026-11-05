@@ -1,35 +1,23 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
 import {
-  LayoutDashboard,
-  BookOpen,
-  Users,
-  CreditCard,
-  Settings,
-  FileText,
-  UserCircle,
-  UserPlus,
-  DollarSign,
-  Bookmark,
-  Wallet,
-  Gift,
-  MessageSquare,
-  MessageCircle,
-  Activity,
-  Search,
-  HardDrive,
-  type LucideIcon,
+  LayoutDashboard, BookOpen, Users, CreditCard, Settings, FileText,
+  UserCircle, UserPlus, DollarSign, Bookmark, Wallet, Gift,
+  MessageSquare, MessageCircle, Activity, Search, HardDrive,
+  type LucideIcon
 } from "lucide-react";
-import { Role } from "@/types";
+import { Role, Permission } from "@/types";
 
 interface NavItem {
   name: string;
   href: string;
   icon: LucideIcon;
+  requiredPermission?: Permission;
 }
 
 const navConfig: Record<Role, NavItem[]> = {
@@ -62,10 +50,11 @@ const navConfig: Record<Role, NavItem[]> = {
   ],
   SECRETARY: [
     { name: "Overview", href: "/dashboard/doctor", icon: LayoutDashboard },
-    { name: "Students", href: "/dashboard/doctor/students", icon: Users },
-    { name: "Exams", href: "/dashboard/doctor/exams", icon: FileText },
-    { name: "Messages", href: "/dashboard/doctor/messages", icon: MessageCircle },
-    { name: "Support", href: "/dashboard/doctor/support", icon: MessageSquare },
+    { name: "Students", href: "/dashboard/doctor/students", icon: Users, requiredPermission: "VIEW_STUDENTS" },
+    { name: "Courses", href: "/dashboard/doctor/courses", icon: BookOpen, requiredPermission: "VIEW_COURSES" },
+    { name: "Exams", href: "/dashboard/doctor/exams", icon: FileText, requiredPermission: "VIEW_EXAMS" },
+    { name: "Messages", href: "/dashboard/doctor/messages", icon: MessageCircle, requiredPermission: "VIEW_MESSAGES" },
+    { name: "Support", href: "/dashboard/doctor/support", icon: MessageSquare, requiredPermission: "VIEW_SUPPORT" },
     { name: "Profile", href: "/dashboard/doctor/profile", icon: UserCircle },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
@@ -88,21 +77,27 @@ export default function Sidebar({
   isOpen,
   onClose,
   role,
+  permissions,
 }: {
   isOpen: boolean;
   onClose: () => void;
   role: Role;
+  permissions?: Permission[];
 }) {
   const pathname = usePathname();
-  const navItems = navConfig[role];
+  const allNavItems = navConfig[role];
+
+  // Filter items based on secretary permissions
+  const navItems = allNavItems.filter((item) => {
+    if (role !== "SECRETARY") return true;
+    if (!item.requiredPermission) return true;
+    return permissions?.includes(item.requiredPermission);
+  });
 
   return (
     <>
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-vena-900/50 z-30 md:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 bg-vena-900/50 z-30 md:hidden" onClick={onClose} />
       )}
       <aside
         className={cn(
@@ -115,10 +110,7 @@ export default function Sidebar({
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/dashboard" &&
-                pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.name}

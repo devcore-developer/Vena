@@ -19,7 +19,8 @@ export async function POST(
       const payment = await tx.payment.findUnique({
         where: { id: params.paymentId },
         include: {
-          course: { select: { id: true, title: true, doctorId: true } },
+          // أضف slug:true هنا
+          course: { select: { id: true, title: true, doctorId: true, slug: true } },
           enrollment: true,
         },
       });
@@ -151,7 +152,7 @@ export async function POST(
       "PAYMENT_APPROVED",
       "Payment Approved",
       `Your payment for ${result.payment.course.title} has been approved. You can now access the course.`,
-      `/learn/${result.payment.course.id}`
+      `/learn/${result.payment.course.slug || result.payment.course.id}` // استخدام slug أو id
     );
 
     // Notify doctor
