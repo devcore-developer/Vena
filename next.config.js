@@ -6,8 +6,9 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '250mb',
     },
+    // FIX: منع Next.js من bundle @vercel/blob (لأنه بيعتمد على undici اللي فيه private fields)
+    serverExternalPackages: ['@vercel/blob'],
   },
-  // FIX: سماح للصور من مصادر خارجية (لو هتستخدم next/image)
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**.amazonaws.com' },
