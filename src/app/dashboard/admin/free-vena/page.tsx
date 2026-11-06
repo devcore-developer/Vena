@@ -55,7 +55,7 @@ export default function AdminFreeListPage() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/free");
+      const res = await fetch("/api/admin/free-vena");
       if (!res.ok) throw new Error("Failed to load videos");
       const data = await res.json();
       setItems(data.data || []);
@@ -86,7 +86,7 @@ export default function AdminFreeListPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/free/${deleteTarget.id}`, {
+      const res = await fetch(`/api/admin/free-vena/${deleteTarget.id}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -117,7 +117,7 @@ export default function AdminFreeListPage() {
             Manage free medical learning videos (uploads and YouTube embeds).
           </p>
         </div>
-        <Button onClick={() => router.push("/dashboard/admin/free/new")}>
+        <Button onClick={() => router.push("/dashboard/admin/free-vena/new")}>
           <Plus className="mr-2 h-4 w-4" /> Add Free Video
         </Button>
       </div>
@@ -213,7 +213,7 @@ export default function AdminFreeListPage() {
               ? "Add Free Video"
               : undefined
           }
-          onAction={() => router.push("/dashboard/admin/free/new")}
+          onAction={() => router.push("/dashboard/admin/free-vena/new")}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -281,7 +281,7 @@ export default function AdminFreeListPage() {
                     variant="secondary"
                     className="flex-1"
                     onClick={() =>
-                      router.push(`/dashboard/admin/free/${item.id}/edit`)
+                      router.push(`/dashboard/admin/free-vena/${item.id}/edit`)
                     }
                   >
                     <Pencil className="mr-1 h-3.5 w-3.5" /> Edit

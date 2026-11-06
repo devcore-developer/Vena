@@ -120,27 +120,29 @@ export function FreeVideoForm({
         videoUrl,
       };
 
-      const url =
-        mode === "create"
-          ? "/api/admin/free"
-          : `/api/admin/free/${resourceId}`;
-      const method = mode === "create" ? "POST" : "PUT";
+    // في الـ handleSubmit، عدّل الأسطر دي:
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const url =
+    mode === "create"
+        ? "/api/admin/free-vena"
+        : `/api/admin/free-vena/${resourceId}`;
+    const method = mode === "create" ? "POST" : "PUT";
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to save");
-      }
+    const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    });
 
-      const data = await res.json();
-      // Redirect to list page
-      router.push("/dashboard/admin/free");
-      router.refresh();
+    if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || "Failed to save");
+    }
+
+    const data = await res.json();
+    // Redirect to list page
+    router.push("/dashboard/admin/free-vena");
+    router.refresh();
     } catch (err: any) {
       setError(err.message);
     } finally {

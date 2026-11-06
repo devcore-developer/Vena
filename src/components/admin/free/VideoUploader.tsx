@@ -156,7 +156,7 @@ export function VideoUploader({
         setState({ status: "idle" });
       };
 
-      xhr.open("POST", "/api/admin/free/upload");
+      xhr.open("POST", "/api/admin/free-vena/upload");
       xhr.send(formData);
     },
     [onChange]
