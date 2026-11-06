@@ -6,8 +6,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '250mb',
     },
-    // FIX: منع Next.js من bundle @vercel/blob (لأنه بيعتمد على undici اللي فيه private fields)
-    serverExternalPackages: ['@vercel/blob'],
+    serverComponentsExternalPackages: ['@vercel/blob'],
   },
   images: {
     remotePatterns: [
@@ -17,6 +16,12 @@ const nextConfig = {
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
     ],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [...(config.externals || []), '@vercel/blob'];
+    }
+    return config;
   },
   async headers() {
     return [
