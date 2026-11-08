@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Maximize, Minimize } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StreamVaultPlayerProps {
@@ -25,6 +25,8 @@ export function StreamVaultPlayer({
 }: StreamVaultPlayerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const src = iframeUrl 
     ? (iframeUrl.startsWith("http") ? iframeUrl : `https://streamvault.one/embed/${iframeUrl}`)
@@ -37,12 +39,34 @@ export function StreamVaultPlayer({
     return () => clearTimeout(t);
   }, [src]);
 
+  // Listen for fullscreen changes to update the button icon and container styling
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen?.().catch((err) => {
+        console.error("Error attempting to enable fullscreen", err);
+      });
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
   return (
     <div
+      ref={containerRef}
       className={cn(
-        "relative bg-black overflow-hidden",
-        bordered && "rounded-xl border border-slate-200",
-        "aspect-video",
+        "relative bg-black overflow-hidden group",
+        bordered && !isFullscreen && "rounded-xl border border-slate-200",
+        isFullscreen ? "flex items-center justify-center h-screen w-screen" : "aspect-video",
         className
       )}
     >
@@ -67,10 +91,12 @@ export function StreamVaultPlayer({
       <iframe
         src={src}
         title={title || "Video player"}
-        className="absolute inset-0 w-full h-full"
+        className={cn(
+          "absolute inset-0 w-full h-full",
+          isFullscreen && "relative !h-[100vh] !w-[100vw] max-w-none max-h-none" // FIX: Stretch iframe in fullscreen to minimize black bars
+        )}
         style={{ border: "none", zIndex: 1 }}
-        allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
-        allowFullScreen
+        allow="encrypted-media; autoplay; picture-in-picture"
         onLoad={() => setLoading(false)}
         onError={() => {
           setLoading(false);
@@ -78,16 +104,24 @@ export function StreamVaultPlayer({
         }}
       />
 
+      {/* Custom VENA Fullscreen Button */}
+      <button
+        onClick={toggleFullscreen}
+        className="absolute bottom-4 right-4 p-2 text-white bg-black/50 rounded-lg hover:bg-black/70 transition-colors z-[9998]"
+        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      >
+        {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+      </button>
+
       {/* Refined Dynamic Student Watermark - Corner Diamond Path */}
       {studentName && !loading && !error && (
         <div 
-          className="absolute pointer-events-none whitespace-nowrap"
+          className="absolute pointer-events-none whitespace-nowrap z-[9999]"
           style={{ 
-            zIndex: 9999,
             animation: "wm-corner-move 34s ease-in-out infinite",
-            color: "rgba(255, 255, 255, 0.9)", // خفيف شوية
-            textShadow: "2px 2px 4px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,0.8)", // outline أقوى
-            fontSize: "1.5rem", // فونت أكبر
+            color: "rgba(255, 255, 255, 0.9)", 
+            textShadow: "2px 2px 4px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,0.8)", 
+            fontSize: "1.5rem", 
             fontWeight: "700",
             willChange: "transform, top, left"
           }}
@@ -98,22 +132,14 @@ export function StreamVaultPlayer({
 
       <style jsx>{`
         @keyframes wm-corner-move {
-          /* Top Left */
           0% { top: 10%; left: 5%; transform: translateX(0%); }
           17.6% { top: 10%; left: 5%; transform: translateX(0%); }
-          
-          /* Top Right */
           25% { top: 10%; left: 90%; transform: translateX(-100%); }
           42.6% { top: 10%; left: 90%; transform: translateX(-100%); }
-          
-          /* Bottom Right */
           50% { top: 80%; left: 90%; transform: translateX(-100%); }
           67.6% { top: 80%; left: 90%; transform: translateX(-100%); }
-          
-          /* Bottom Left */
           75% { top: 80%; left: 5%; transform: translateX(0%); }
           92.6% { top: 80%; left: 5%; transform: translateX(0%); }
-          
           100% { top: 10%; left: 5%; transform: translateX(0%); }
         }
       `}</style>
