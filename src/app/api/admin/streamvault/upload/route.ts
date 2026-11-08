@@ -9,13 +9,16 @@ import {
   streamvaultStatusLabel,
   buildEmbedUrl,
 } from "@/lib/streamvault";
-import { deleteVideoFromR2 } from "@/lib/video-storage";
-import { getPresignedUploadUrl, buildObjectKey } from "@/lib/video-storage";
+import {
+  deleteVideoFromR2,
+  getPresignedUploadUrl,
+  buildObjectKey,
+  getPublicUrl,
+} from "@/lib/video-storage";
 import type { Permission } from "@/types";
 
 // ============================================================
 // GET /api/admin/streamvault/upload
-// بيرجع Presigned URL عشان المتصفح يرفع الفيديو مباشرة على R2
 // ============================================================
 export async function GET(req: NextRequest) {
   let auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
@@ -31,8 +34,11 @@ export async function GET(req: NextRequest) {
 
     const objectKey = buildObjectKey(fileName);
     const uploadUrl = await getPresignedUploadUrl(objectKey, mimeType);
+    
+    // FIX: نجيب الـ Public URL اللي StreamVault هتقدر تسحب منه
+    const publicR2Url = getPublicUrl(objectKey);
 
-    return NextResponse.json({ uploadUrl, objectKey });
+    return NextResponse.json({ uploadUrl, objectKey, publicR2Url });
   } catch (error: any) {
     console.error("[streamvault/upload] GET error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,7 +47,6 @@ export async function GET(req: NextRequest) {
 
 // ============================================================
 // POST /api/admin/streamvault/upload
-// بيتقبل R2 URL (بعد ما المتصفح رفع الفيديو) وبيبعت لـ StreamVault
 // ============================================================
 export async function POST(req: NextRequest) {
   let auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
@@ -54,9 +59,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { r2Url, objectKey, fileName, size } = body;
+    const { publicR2Url, objectKey, fileName, size } = body;
 
-    if (!r2Url || !objectKey) {
+    if (!publicR2Url || !objectKey) {
       return NextResponse.json({ error: "Missing R2 URL or objectKey" }, { status: 400 });
     }
 
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     console.log("[streamvault/upload] Step 2: Calling StreamVault URL pull...");
     const svResult = await uploadByUrl({
-      url: r2Url,
+      url: publicR2Url,
       title: fileName || "Untitled",
     });
 

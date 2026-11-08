@@ -61,7 +61,7 @@ export function VideoUploader({
       }
 
       try {
-        // Step 1: Get Presigned URL from our API
+        // Step 1: Get Presigned URL and Public URL from our API
         setState({
           status: "uploading",
           progress: 0,
@@ -71,7 +71,7 @@ export function VideoUploader({
 
         const res = await fetch(`/api/admin/streamvault/upload?fileName=${encodeURIComponent(file.name)}&mimeType=${encodeURIComponent(file.type)}`);
         if (!res.ok) throw new Error("Failed to get upload URL");
-        const { uploadUrl, objectKey } = await res.json();
+        const { uploadUrl, objectKey, publicR2Url } = await res.json();
 
         // Step 2: Upload directly to R2
         setState({
@@ -114,12 +114,11 @@ export function VideoUploader({
           phase: "StreamVault processing...",
         });
 
-        const r2Url = uploadUrl.split("?")[0]; // Base R2 URL
         const svRes = await fetch(`/api/admin/streamvault/upload`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            r2Url: r2Url,
+            publicR2Url: publicR2Url, // FIX: استخدم publicR2Url
             objectKey: objectKey,
             fileName: file.name,
             size: file.size,

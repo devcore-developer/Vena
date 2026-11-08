@@ -15,7 +15,7 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     duration: 0,
     isPreview: false,
     isPublished: true,
-    sectionTitle: "", // Optional section
+    sectionTitle: "", 
   });
   
   const [streamvaultData, setStreamvaultData] = useState<{
@@ -28,6 +28,7 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
   
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -35,45 +36,58 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     setUploading(true);
     setError("");
     setUploadProgress(0);
+    setUploadPhase("Preparing upload...");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      // Step 1: Get Presigned URL and Public URL from our API
+      const res = await fetch(`/api/admin/streamvault/upload?fileName=${encodeURIComponent(file.name)}&mimeType=${encodeURIComponent(file.type)}`);
+      if (!res.ok) throw new Error("Failed to get upload URL");
+      const { uploadUrl, objectKey, publicR2Url } = await res.json();
 
-      // FIX: رفع الفيديو على StreamVault عبر الـ upload route الجديد
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/admin/streamvault/upload");
+      // Step 2: Upload directly to R2
+      setUploadPhase("Uploading to Cloudflare...");
+      
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl, true);
+        xhr.setRequestHeader("Content-Type", file.type);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 90);
-          setUploadProgress(progress);
-        }
-      };
-
-      const uploadPromise = new Promise<any>((resolve, reject) => {
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const res = JSON.parse(xhr.responseText);
-              resolve(res);
-            } catch (e) {
-              reject(new Error("Invalid response from server"));
-            }
-          } else {
-            try {
-              const res = JSON.parse(xhr.responseText);
-              reject(new Error(res.error || `Upload failed (HTTP ${xhr.status})`));
-            } catch {
-              reject(new Error(`Upload failed (HTTP ${xhr.status})`));
-            }
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 90);
+            setUploadProgress(percent);
           }
         };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed with status ${xhr.status}`));
+        };
         xhr.onerror = () => reject(new Error("Network error during upload"));
+        xhr.send(file);
       });
 
-      xhr.send(formData);
-      const result = await uploadPromise;
+      // Step 3: Tell our API to pull from R2 to StreamVault
+      setUploadPhase("StreamVault processing...");
+      setUploadProgress(90);
+
+      const svRes = await fetch(`/api/admin/streamvault/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicR2Url: publicR2Url,
+          objectKey: objectKey,
+          fileName: file.name,
+          size: file.size,
+        }),
+      });
+
+      if (!svRes.ok) {
+        const errData = await svRes.json().catch(() => ({}));
+        throw new Error(errData.error || "StreamVault processing failed");
+      }
+
+      const result = await svRes.json();
 
       if (!result.videoId || !result.iframeLink) {
         throw new Error("StreamVault did not return video ID or iframe link");
@@ -102,7 +116,6 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     setError("");
 
     try {
-      // لو الفيديو اترفع, اعمل media record الأول
       let mediaId: string | undefined = undefined;
 
       if (form.type === "VIDEO" && streamvaultData) {
@@ -195,7 +208,7 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
                 {uploading ? (
                   <>
                     <Loader2 className="h-6 w-6 animate-spin text-vena-500 mb-2" />
-                    <p className="text-xs text-charcoal-muted">Uploading... {uploadProgress}%</p>
+                    <p className="text-xs text-charcoal-muted">{uploadPhase} {uploadProgress}%</p>
                     <div className="w-full bg-vena-100 rounded-full h-1.5 mt-2">
                       <div className="h-full bg-vena-500 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
                     </div>
