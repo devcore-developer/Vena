@@ -5,9 +5,9 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StreamVaultPlayerProps {
-  /** StreamVault video id (fallback). */
-  videoId?: string;
-  /** Full iframe URL — Preferred and used if available. */
+  /** StreamVault video id (or short key). */
+  videoId: string;
+  /** Full iframe URL — preferred if you have it. */
   iframeUrl?: string;
   /** Optional title for accessibility. */
   title?: string;
@@ -17,8 +17,13 @@ interface StreamVaultPlayerProps {
   className?: string;
   /** Show a border around the player. */
   bordered?: boolean;
+  /** Student name for watermark (optional, used for protected videos) */
+  studentName?: string;
 }
 
+/**
+ * StreamVault video player (iframe embed) with dynamic watermark overlay.
+ */
 export function StreamVaultPlayer({
   videoId,
   iframeUrl,
@@ -26,6 +31,7 @@ export function StreamVaultPlayer({
   poster,
   className,
   bordered = true,
+  studentName,
 }: StreamVaultPlayerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,9 +91,39 @@ export function StreamVaultPlayer({
         onLoad={() => setLoading(false)}
         onError={() => {
           setLoading(false);
-          setError("Failed to load video player. Make sure localhost is allowed in StreamVault.");
+          setError("Failed to load video player");
         }}
       />
+
+      {/* Dynamic Student Watermark Overlay */}
+      {studentName && !loading && !error && (
+        <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
+          <div
+            className="absolute top-1/4 left-0 text-white font-semibold tracking-wide opacity-30 whitespace-nowrap"
+            style={{ animation: "watermark-move 15s linear infinite" }}
+          >
+            {studentName} | VENA
+          </div>
+          <div
+            className="absolute bottom-1/4 right-0 text-white font-semibold tracking-wide opacity-20 whitespace-nowrap"
+            style={{ animation: "watermark-move-reverse 20s linear infinite" }}
+          >
+            {studentName}
+          </div>
+        </div>
+      )}
+
+      {/* CSS Animations for Watermark */}
+      <style jsx>{`
+        @keyframes watermark-move {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100vw); }
+        }
+        @keyframes watermark-move-reverse {
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100vw); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -6,20 +6,16 @@ import { StreamVaultPlayer } from "@/components/video/StreamVaultPlayer";
 
 interface VideoPlayerProps {
   mediaId: string;
-  studentName?: string;
-  /** StreamVault video id (if migrated) */
+  studentName?: string; // <-- ضفت ده
   streamvaultId?: string | null;
-  /** StreamVault iframe URL */
   streamvaultIframe?: string | null;
-  /** Optional poster image */
   poster?: string | null;
-  /** Optional title for accessibility */
   title?: string;
 }
 
 export function VideoPlayer({
   mediaId,
-  studentName,
+  studentName, // <-- ضفت ده
   streamvaultId,
   streamvaultIframe,
   poster,
@@ -76,6 +72,7 @@ export function VideoPlayer({
           iframeUrl={streamvaultIframe || undefined}
           title={title}
           poster={poster || undefined}
+          studentName={studentName} // <-- ضفت ده
         />
         {studentName && (
           <p className="text-xs text-charcoal-muted text-center">

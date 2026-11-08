@@ -112,7 +112,7 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { name: true },
+    select: { name: true, email: true }, // ضفنا email لو محتاجينه
   });
 
   const lessonIds = [
