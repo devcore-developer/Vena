@@ -21,6 +21,7 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
 
   let course: any = null;
   let previewMedia: any = null;
+  let studentName: string | undefined = undefined;
 
   try {
     course = await prisma.course.findUnique({
@@ -60,6 +61,15 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
           streamvaultThumbnail: true,
         },
       });
+    }
+
+    // FIX: نجيب اسم الطالب لو هو مسجل دخول كطالب
+    if (session?.role === "STUDENT") {
+      const user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { name: true },
+      });
+      studentName = user?.name || undefined;
     }
   } catch {
     // DB unavailable
@@ -152,13 +162,14 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
           {/* Preview Video */}
           {previewMedia && (
             <div className="rounded-xl overflow-hidden shadow-lg">
-              {/* FIX: بيمرّر streamvault fields للـ VideoPlayer */}
+              {/* FIX: بيمرّر studentName للـ VideoPlayer */}
               <VideoPlayer
                 mediaId={previewMedia.id}
                 streamvaultId={previewMedia.streamvaultId}
                 streamvaultIframe={previewMedia.streamvaultIframe}
                 poster={previewMedia.streamvaultThumbnail}
                 title={course.title}
+                studentName={studentName}
               />
             </div>
           )}

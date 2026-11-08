@@ -5,25 +5,15 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StreamVaultPlayerProps {
-  /** StreamVault video id (or short key). */
-  videoId: string;
-  /** Full iframe URL — preferred if you have it. */
+  videoId?: string;
   iframeUrl?: string;
-  /** Optional title for accessibility. */
   title?: string;
-  /** Optional poster image while loading. */
   poster?: string;
-  /** Aspect ratio class — defaults to 16:9. */
   className?: string;
-  /** Show a border around the player. */
   bordered?: boolean;
-  /** Student name for watermark (optional, used for protected videos) */
   studentName?: string;
 }
 
-/**
- * StreamVault video player (iframe embed) with dynamic watermark overlay.
- */
 export function StreamVaultPlayer({
   videoId,
   iframeUrl,
@@ -35,9 +25,7 @@ export function StreamVaultPlayer({
 }: StreamVaultPlayerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // FIX: استخدم iframeUrl لو موجود، وإلا استخدم videoId
   const src = iframeUrl 
     ? (iframeUrl.startsWith("http") ? iframeUrl : `https://streamvault.one/embed/${iframeUrl}`)
     : `https://streamvault.one/embed/${videoId}`;
@@ -60,11 +48,7 @@ export function StreamVaultPlayer({
     >
       {poster && loading && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={poster}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <img src={poster} alt="" className="absolute inset-0 w-full h-full object-cover" />
       )}
 
       {loading && (
@@ -81,11 +65,10 @@ export function StreamVaultPlayer({
       )}
 
       <iframe
-        ref={iframeRef}
         src={src}
         title={title || "Video player"}
         className="absolute inset-0 w-full h-full"
-        style={{ border: "none" }}
+        style={{ border: "none", zIndex: 1 }}
         allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
         allowFullScreen
         onLoad={() => setLoading(false)}
@@ -95,33 +78,43 @@ export function StreamVaultPlayer({
         }}
       />
 
-      {/* Dynamic Student Watermark Overlay */}
+      {/* Refined Dynamic Student Watermark - Corner Diamond Path */}
       {studentName && !loading && !error && (
-        <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
-          <div
-            className="absolute top-1/4 left-0 text-white font-semibold tracking-wide opacity-30 whitespace-nowrap"
-            style={{ animation: "watermark-move 15s linear infinite" }}
-          >
-            {studentName} | VENA
-          </div>
-          <div
-            className="absolute bottom-1/4 right-0 text-white font-semibold tracking-wide opacity-20 whitespace-nowrap"
-            style={{ animation: "watermark-move-reverse 20s linear infinite" }}
-          >
-            {studentName}
-          </div>
+        <div 
+          className="absolute pointer-events-none whitespace-nowrap"
+          style={{ 
+            zIndex: 9999,
+            animation: "wm-corner-move 34s ease-in-out infinite",
+            color: "rgba(255, 255, 255, 0.9)", // خفيف شوية
+            textShadow: "2px 2px 4px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,0.8)", // outline أقوى
+            fontSize: "1.5rem", // فونت أكبر
+            fontWeight: "700",
+            willChange: "transform, top, left"
+          }}
+        >
+          {studentName}
         </div>
       )}
 
-      {/* CSS Animations for Watermark */}
       <style jsx>{`
-        @keyframes watermark-move {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100vw); }
-        }
-        @keyframes watermark-move-reverse {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100vw); }
+        @keyframes wm-corner-move {
+          /* Top Left */
+          0% { top: 10%; left: 5%; transform: translateX(0%); }
+          17.6% { top: 10%; left: 5%; transform: translateX(0%); }
+          
+          /* Top Right */
+          25% { top: 10%; left: 90%; transform: translateX(-100%); }
+          42.6% { top: 10%; left: 90%; transform: translateX(-100%); }
+          
+          /* Bottom Right */
+          50% { top: 80%; left: 90%; transform: translateX(-100%); }
+          67.6% { top: 80%; left: 90%; transform: translateX(-100%); }
+          
+          /* Bottom Left */
+          75% { top: 80%; left: 5%; transform: translateX(0%); }
+          92.6% { top: 80%; left: 5%; transform: translateX(0%); }
+          
+          100% { top: 10%; left: 5%; transform: translateX(0%); }
         }
       `}</style>
     </div>
