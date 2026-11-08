@@ -9,14 +9,39 @@ import {
   streamvaultStatusLabel,
   buildEmbedUrl,
 } from "@/lib/streamvault";
-import {
-  uploadVideoToR2,
-  deleteVideoFromR2,
-} from "@/lib/video-storage";
+import { deleteVideoFromR2 } from "@/lib/video-storage";
+import { getPresignedUploadUrl, buildObjectKey } from "@/lib/video-storage";
 import type { Permission } from "@/types";
 
 // ============================================================
+// GET /api/admin/streamvault/upload
+// بيرجع Presigned URL عشان المتصفح يرفع الفيديو مباشرة على R2
+// ============================================================
+export async function GET(req: NextRequest) {
+  let auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
+  if (!auth.ok) {
+    auth = (await requireAdmin()) as any;
+    if (!auth.ok) return auth.response;
+  }
+
+  try {
+    const url = new URL(req.url);
+    const fileName = url.searchParams.get("fileName") || "video.mp4";
+    const mimeType = url.searchParams.get("mimeType") || "video/mp4";
+
+    const objectKey = buildObjectKey(fileName);
+    const uploadUrl = await getPresignedUploadUrl(objectKey, mimeType);
+
+    return NextResponse.json({ uploadUrl, objectKey });
+  } catch (error: any) {
+    console.error("[streamvault/upload] GET error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// ============================================================
 // POST /api/admin/streamvault/upload
+// بيتقبل R2 URL (بعد ما المتصفح رفع الفيديو) وبيبعت لـ StreamVault
 // ============================================================
 export async function POST(req: NextRequest) {
   let auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
@@ -28,39 +53,27 @@ export async function POST(req: NextRequest) {
   let r2ObjectKey: string | null = null;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const body = await req.json();
+    const { r2Url, objectKey, fileName, size } = body;
 
-    if (!file) {
-      return NextResponse.json(
-        { error: "No file provided. Use multipart/form-data with a 'file' field." },
-        { status: 400 }
-      );
+    if (!r2Url || !objectKey) {
+      return NextResponse.json({ error: "Missing R2 URL or objectKey" }, { status: 400 });
     }
 
-    // Step 1: Upload to R2 (temporary)
-    console.log("[streamvault/upload] Step 1: Uploading to R2...");
-    const r2Result = await uploadVideoToR2(file);
-    r2ObjectKey = r2Result.objectKey;
+    r2ObjectKey = objectKey;
 
-    // Step 2: Call StreamVault uploadByUrl (URL pull)
     console.log("[streamvault/upload] Step 2: Calling StreamVault URL pull...");
     const svResult = await uploadByUrl({
-      url: r2Result.url,
-      title: file.name || "Untitled",
+      url: r2Url,
+      title: fileName || "Untitled",
     });
 
     const tempVideoId = svResult.videoId;
-    if (!tempVideoId) {
-      throw new Error("StreamVault did not return a video ID");
-    }
+    if (!tempVideoId) throw new Error("StreamVault did not return a video ID");
 
-    console.log("[streamvault/upload] StreamVault temporary video ID:", tempVideoId);
-
-    // Step 3: Poll status until ready (or timeout: 5 min)
     console.log("[streamvault/upload] Step 3: Polling for ready status...");
-    const pollTimeoutMs = 5 * 60 * 1000; // 5 minutes
-    const pollIntervalMs = 10 * 1000; // 10 seconds
+    const pollTimeoutMs = 5 * 60 * 1000;
+    const pollIntervalMs = 10 * 1000;
     const startTime = Date.now();
 
     let status = svResult.status;
@@ -77,35 +90,28 @@ export async function POST(req: NextRequest) {
           `[streamvault/upload] Poll attempt ${attempts}: status=${status} (${streamvaultStatusLabel(status)})`
         );
 
-        if (status === -1) {
-          throw new Error("StreamVault transcoding failed");
-        }
+        if (status === -1) throw new Error("StreamVault transcoding failed");
       } catch (pollError: any) {
         console.warn("[streamvault/upload] Poll error (will retry):", pollError.message);
       }
     }
 
-    const isReady = isStreamvaultReady(status);
-
-    // Step 4: Delete the temporary R2 copy
     console.log("[streamvault/upload] Step 4: Cleaning up R2 temporary copy...");
-    await deleteVideoFromR2(r2ObjectKey);
-    r2ObjectKey = null;
+    if (r2ObjectKey) {
+      await deleteVideoFromR2(r2ObjectKey);
+      r2ObjectKey = null;
+    }
 
-    // Step 5: Fetch final video metadata to get the REAL video ID
     console.log("[streamvault/upload] Step 5: Fetching final video metadata...");
     const finalVideo = await getVideo(tempVideoId);
-    
-    // FIX: استخدم الـ ID الحقيقي بعد المعالجة
-    const finalVideoId = finalVideo.id || finalVideo.videoKey || tempVideoId;
-    const finalIframeUrl = buildEmbedUrl({ 
-      iframeLink: finalVideo.iframeLink, 
-      id: finalVideoId 
+    const finalVideoId = String(finalVideo.id || finalVideo.videoKey || tempVideoId || "");
+    const finalIframeUrl = buildEmbedUrl({
+      iframeLink: finalVideo.iframeLink ? String(finalVideo.iframeLink) : undefined,
+      id: finalVideoId || undefined
     });
 
     console.log("[streamvault/upload] ✅ Upload complete:", { videoId: finalVideoId, iframeLink: finalIframeUrl });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         actorId: auth.session.userId,
@@ -113,11 +119,9 @@ export async function POST(req: NextRequest) {
         entityType: "StreamVaultVideo",
         entityId: finalVideoId,
         metadata: {
-          filename: file.name,
-          size: r2Result.size,
+          filename: fileName,
+          size: size,
           streamvaultId: finalVideoId,
-          status,
-          ready: isReady,
         },
       },
     });
@@ -127,9 +131,9 @@ export async function POST(req: NextRequest) {
       iframeLink: finalIframeUrl,
       thumbnailUrl: finalVideo.thumbnailUrl || null,
       status,
-      ready: isReady,
-      originalName: file.name,
-      size: r2Result.size,
+      ready: isStreamvaultReady(status),
+      originalName: fileName,
+      size: size,
     });
   } catch (error: any) {
     console.error("[streamvault/upload] ❌ Upload failed:", error);
@@ -139,25 +143,8 @@ export async function POST(req: NextRequest) {
       await deleteVideoFromR2(r2ObjectKey);
     }
 
-    const status = error?.status || 500;
-    const detail = error?.detail || {};
-
-    if (detail?.code === "QUOTA_EXCEEDED" || detail?.plan === "free") {
-      return NextResponse.json(
-        {
-          error: "StreamVault API key is on the Free plan.",
-          streamvaultError: detail?.error || error.message,
-          code: "QUOTA_EXCEEDED",
-        },
-        { status: 403 }
-      );
-    }
-
     const message = error instanceof Error ? error.message : "Upload failed";
-    return NextResponse.json(
-      { error: message },
-      { status: status >= 400 && status < 600 ? status : 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

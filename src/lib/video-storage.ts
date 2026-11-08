@@ -2,10 +2,6 @@
  * Video Storage Utility (Cloudflare R2)
  * ======================================
  * Uploads video files temporarily to R2, so StreamVault can pull them via URL.
- *
- * Path convention: free-vena/videos/<timestamp>-<safe-name>
- *
- * SECURITY: server-side only. R2 credentials never reach the browser.
  */
 
 import {
@@ -13,6 +9,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // ============================================================
 // R2 / S3 client
@@ -38,88 +35,45 @@ function getR2Client(): S3Client {
 
 function getBucketName(): string {
   const bucket = process.env.R2_BUCKET_NAME;
-  if (!bucket) {
-    throw new Error("R2_BUCKET_NAME env var is required.");
-  }
+  if (!bucket) throw new Error("R2_BUCKET_NAME env var is required.");
   return bucket;
 }
 
 function getPublicBaseUrl(): string {
-  const base =
-    process.env.CLOUDFLARE_PUBLIC_BASE_URL ||
-    process.env.R2_PUBLIC_BASE_URL;
-  if (!base) {
-    throw new Error(
-      "CLOUDFLARE_PUBLIC_BASE_URL env var is required."
-    );
-  }
+  const base = process.env.CLOUDFLARE_PUBLIC_BASE_URL;
+  if (!base) throw new Error("CLOUDFLARE_PUBLIC_BASE_URL env var is required.");
   return base.replace(/\/$/, "");
 }
 
 // ============================================================
-// Types
+// Presigned URL for Direct Browser Upload
 // ============================================================
 
-export interface VideoStorageResult {
-  url: string;
-  objectKey: string;
-  size: number;
-  contentType: string;
-  originalName: string;
+export async function getPresignedUploadUrl(objectKey: string, mimeType: string): Promise<string> {
+  const client = getR2Client();
+  const bucket = getBucketName();
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: objectKey,
+    ContentType: mimeType,
+  });
+
+  // صلاحية 5 دقايق للرفع المباشر
+  return getSignedUrl(client, command, { expiresIn: 300 });
 }
 
-// ============================================================
-// Upload
-// ============================================================
-
-export async function uploadVideoToR2(
-  file: File
-): Promise<VideoStorageResult> {
-  if (!file || file.size === 0) {
-    throw new Error("File is empty");
-  }
-
-  // Build object key
-  const safeName = (file.name || "video.mp4")
+export function buildObjectKey(fileName: string): string {
+  const safeName = (fileName || "video.mp4")
     .toLowerCase()
     .replace(/[^a-z0-9.-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "") || "video.mp4";
+  return `free-vena/videos/${Date.now()}-${safeName}`;
+}
 
-  const timestamp = Date.now();
-  const objectKey = `free-vena/videos/${timestamp}-${safeName}`;
-
-  // Read file into buffer
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  // Upload to R2
-  const client = getR2Client();
-  const bucket = getBucketName();
-
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: objectKey,
-      Body: buffer,
-      ContentType: file.type || "video/mp4",
-      ContentDisposition: "inline",
-      Metadata: {
-        "original-filename": file.name || "video.mp4",
-        "uploaded-at": new Date().toISOString(),
-      },
-    })
-  );
-
-  const publicUrl = `${getPublicBaseUrl()}/${objectKey}`;
-
-  return {
-    url: publicUrl,
-    objectKey,
-    size: buffer.length,
-    contentType: file.type || "video/mp4",
-    originalName: file.name || "video.mp4",
-  };
+export function getPublicUrl(objectKey: string): string {
+  return `${getPublicBaseUrl()}/${objectKey}`;
 }
 
 // ============================================================
@@ -138,9 +92,7 @@ export async function deleteVideoFromR2(objectKey: string): Promise<void> {
   try {
     const client = getR2Client();
     const bucket = getBucketName();
-    await client.send(
-      new DeleteObjectCommand({ Bucket: bucket, Key: objectKey })
-    );
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
   } catch (error) {
     console.error("[video-storage] Failed to delete R2 object:", error);
   }
