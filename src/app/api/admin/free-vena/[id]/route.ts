@@ -6,9 +6,13 @@ import {
   detectVideoSource,
   deleteFreeVideo,
 } from "@/lib/free-video-storage";
+import {
+  deletePdfFromR2,
+  objectKeyFromUrl,
+} from "@/lib/pdf/storage";
 
 // ============================================================
-// GET /api/admin/free/[id] — Get a single free video for editing
+// GET /api/admin/free-vena/[id] — Get single free content (VIDEO or PDF)
 // ============================================================
 export async function GET(
   _req: NextRequest,
@@ -25,9 +29,9 @@ export async function GET(
       },
     });
 
-    if (!resource || resource.type !== "VIDEO") {
+    if (!resource || !["VIDEO", "PDF"].includes(resource.type)) {
       return NextResponse.json(
-        { error: "Free video not found" },
+        { error: "Free content not found" },
         { status: 404 }
       );
     }
@@ -42,33 +46,34 @@ export async function GET(
       thumbnail: resource.thumbnail,
       resourceUrl: resource.resourceUrl,
       videoUrl: resource.videoUrl,
+      streamvaultId: resource.streamvaultId,
+      streamvaultIframe: resource.streamvaultIframe,
+      streamvaultThumbnail: resource.streamvaultThumbnail,
       categoryId: resource.categoryId,
       categoryName: resource.category?.name || null,
       status: resource.status,
       isFeatured: resource.isFeatured,
-      source: detectVideoSource({
-        resourceUrl: resource.resourceUrl,
-        videoUrl: resource.videoUrl,
-      }),
+      source:
+        resource.type === "PDF"
+          ? "upload"
+          : detectVideoSource({
+              resourceUrl: resource.resourceUrl,
+              videoUrl: resource.videoUrl,
+            }),
       createdAt: resource.createdAt.toISOString(),
       updatedAt: resource.updatedAt.toISOString(),
     });
   } catch (error) {
-    console.error("[admin/free/[id]] GET error:", error);
+    console.error("[admin/free-vena/[id]] GET error:", error);
     return NextResponse.json(
-      { error: "Failed to load free video" },
+      { error: "Failed to load free content" },
       { status: 500 }
     );
   }
 }
 
 // ============================================================
-// PUT /api/admin/free/[id] — Update a free video
-//
-// IMPORTANT: When the admin changes the source type, we:
-//   - If switching from upload → youtube: delete the old uploaded blob
-//   - If switching from youtube → upload: clear the YouTube URL
-//   - If keeping the same source: update only the URL
+// PUT /api/admin/free-vena/[id] — Update free content (VIDEO or PDF)
 // ============================================================
 export async function PUT(
   req: NextRequest,
@@ -78,23 +83,19 @@ export async function PUT(
   if (!auth.ok) return auth.response;
 
   try {
-    // Fetch existing record (we need it to detect source changes)
     const existing = await prisma.freeResource.findUnique({
       where: { id: params.id },
     });
 
-    if (!existing || existing.type !== "VIDEO") {
+    if (!existing || !["VIDEO", "PDF"].includes(existing.type)) {
       return NextResponse.json(
-        { error: "Free video not found" },
+        { error: "Free content not found" },
         { status: 404 }
       );
     }
 
     const body = await req.json();
 
-    // --------------------------------------------------------
-    // Validation
-    // --------------------------------------------------------
     if (!body.title?.trim()) {
       return NextResponse.json(
         { error: "Title is required" },
@@ -102,24 +103,42 @@ export async function PUT(
       );
     }
 
-    const source: string = body.source || "youtube";
-    const oldSource = detectVideoSource({
-      resourceUrl: existing.resourceUrl,
-      videoUrl: existing.videoUrl,
-    });
+    // Determine the new content type (default to existing type if not provided)
+    const newType: "VIDEO" | "PDF" = body.type === "PDF" ? "PDF" : "VIDEO";
+    const oldType = existing.type as "VIDEO" | "PDF";
 
     let newResourceUrl: string | null = existing.resourceUrl;
     let newVideoUrl: string | null = existing.videoUrl;
+    let newStreamvaultId: string | null = existing.streamvaultId;
+    let newStreamvaultIframe: string | null = existing.streamvaultIframe;
 
     // --------------------------------------------------------
-    // Source switching logic
+    // Handle resource URL changes (and cleanup old objects)
     // --------------------------------------------------------
-    if (source === "upload") {
-      // Upload mode
+
+    // VIDEO → PDF: clear video-specific fields, delete old video blob
+    if (oldType === "VIDEO" && newType === "PDF") {
+      if (existing.resourceUrl) {
+        await deleteFreeVideo(existing.resourceUrl);
+      }
+      newVideoUrl = null;
+      newStreamvaultId = null;
+      newStreamvaultIframe = null;
+    }
+
+    // PDF → VIDEO: delete old PDF, clear PDF-specific fields
+    if (oldType === "PDF" && newType === "VIDEO") {
+      if (existing.resourceUrl) {
+        const oldKey = objectKeyFromUrl(existing.resourceUrl);
+        if (oldKey) await deletePdfFromR2(oldKey);
+      }
+    }
+
+    if (newType === "VIDEO") {
+      const source: string = body.source || "youtube";
+
       if (body.resourceUrl !== undefined) {
-        // New upload URL provided
         if (body.resourceUrl && body.resourceUrl.trim()) {
-          // If there was an old uploaded video, delete it (only if URL changed)
           if (
             existing.resourceUrl &&
             existing.resourceUrl !== body.resourceUrl
@@ -128,7 +147,6 @@ export async function PUT(
           }
           newResourceUrl = body.resourceUrl.trim();
         } else if (body.resourceUrl === "") {
-          // Explicitly cleared — delete the old blob
           if (existing.resourceUrl) {
             await deleteFreeVideo(existing.resourceUrl);
           }
@@ -136,14 +154,6 @@ export async function PUT(
         }
       }
 
-      // Clear YouTube URL when switching to upload (unless explicitly kept)
-      if (oldSource === "youtube" && source === "upload") {
-        newVideoUrl = null;
-      }
-    }
-
-    if (source === "youtube") {
-      // YouTube mode
       if (body.videoUrl !== undefined) {
         if (body.videoUrl && body.videoUrl.trim()) {
           const normalized = normalizeYouTubeUrl(body.videoUrl);
@@ -158,23 +168,46 @@ export async function PUT(
           newVideoUrl = null;
         }
       }
-
-      // If switching from upload → youtube, delete the old blob
-      if (oldSource === "upload" && source === "youtube") {
-        if (existing.resourceUrl) {
-          await deleteFreeVideo(existing.resourceUrl);
+    } else if (newType === "PDF") {
+      // PDF update — handle resource URL changes
+      if (body.resourceUrl !== undefined) {
+        if (body.resourceUrl && body.resourceUrl.trim()) {
+          if (
+            existing.resourceUrl &&
+            existing.resourceUrl !== body.resourceUrl
+          ) {
+            // Old was a PDF — delete from R2
+            if (oldType === "PDF") {
+              const oldKey = objectKeyFromUrl(existing.resourceUrl);
+              if (oldKey) await deletePdfFromR2(oldKey);
+            } else {
+              // Old was a video — delete the video blob
+              await deleteFreeVideo(existing.resourceUrl);
+            }
+          }
+          newResourceUrl = body.resourceUrl.trim();
+        } else if (body.resourceUrl === "") {
+          if (existing.resourceUrl) {
+            if (oldType === "PDF") {
+              const oldKey = objectKeyFromUrl(existing.resourceUrl);
+              if (oldKey) await deletePdfFromR2(oldKey);
+            } else {
+              await deleteFreeVideo(existing.resourceUrl);
+            }
+          }
+          newResourceUrl = null;
         }
-        newResourceUrl = null;
       }
+      // PDFs don't have videoUrl / streamvault fields
+      newVideoUrl = null;
+      newStreamvaultId = null;
+      newStreamvaultIframe = null;
     }
 
-    // --------------------------------------------------------
     // Slug update (optional)
-    // --------------------------------------------------------
     let newSlug = existing.slug;
     if (body.slug?.trim() && body.slug !== existing.slug) {
       newSlug = body.slug.trim();
-      // Check uniqueness
       const slugConflict = await prisma.freeResource.findUnique({
         where: { slug: newSlug },
         select: { id: true },
@@ -198,8 +231,11 @@ export async function PUT(
         description: body.description?.trim() || null,
         content: body.content?.trim() || null,
         thumbnail: body.thumbnail?.trim() || null,
+        type: newType,
         resourceUrl: newResourceUrl,
         videoUrl: newVideoUrl,
+        streamvaultId: newStreamvaultId,
+        streamvaultIframe: newStreamvaultIframe,
         categoryId: body.categoryId || null,
         status: body.status || existing.status,
         isFeatured: body.isFeatured === true,
@@ -209,16 +245,15 @@ export async function PUT(
       },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         actorId: auth.session.userId,
-        action: "FREE_VIDEO_UPDATED",
+        action: "FREE_CONTENT_UPDATED",
         entityType: "FreeResource",
         entityId: updated.id,
         metadata: {
-          oldSource,
-          newSource: source,
+          oldType,
+          newType,
           title: updated.title,
         },
       },
@@ -228,27 +263,23 @@ export async function PUT(
       id: updated.id,
       title: updated.title,
       slug: updated.slug,
+      type: updated.type,
       status: updated.status,
-      source: detectVideoSource({
-        resourceUrl: updated.resourceUrl,
-        videoUrl: updated.videoUrl,
-      }),
       resourceUrl: updated.resourceUrl,
       videoUrl: updated.videoUrl,
       updatedAt: updated.updatedAt.toISOString(),
     });
   } catch (error) {
-    console.error("[admin/free/[id]] PUT error:", error);
+    console.error("[admin/free-vena/[id]] PUT error:", error);
     return NextResponse.json(
-      { error: "Failed to update free video" },
+      { error: "Failed to update free content" },
       { status: 500 }
     );
   }
 }
 
 // ============================================================
-// DELETE /api/admin/free/[id] — Delete a free video
-// (also deletes the uploaded blob if it was a direct upload)
+// DELETE /api/admin/free-vena/[id] — Delete free content + storage object
 // ============================================================
 export async function DELETE(
   _req: NextRequest,
@@ -264,36 +295,45 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json(
-        { error: "Free video not found" },
+        { error: "Free content not found" },
         { status: 404 }
       );
     }
 
-    // Delete the uploaded blob if it was a direct upload
+    // Delete the storage object based on type
     if (existing.resourceUrl) {
-      await deleteFreeVideo(existing.resourceUrl);
+      if (existing.type === "PDF") {
+        const objectKey = objectKeyFromUrl(existing.resourceUrl);
+        if (objectKey) {
+          await deletePdfFromR2(objectKey);
+        }
+      } else {
+        await deleteFreeVideo(existing.resourceUrl);
+      }
     }
 
     await prisma.freeResource.delete({
       where: { id: params.id },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         actorId: auth.session.userId,
-        action: "FREE_VIDEO_DELETED",
+        action: "FREE_CONTENT_DELETED",
         entityType: "FreeResource",
         entityId: params.id,
-        metadata: { title: existing.title },
+        metadata: {
+          type: existing.type,
+          title: existing.title,
+        },
       },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[admin/free/[id]] DELETE error:", error);
+    console.error("[admin/free-vena/[id]] DELETE error:", error);
     return NextResponse.json(
-      { error: "Failed to delete free video" },
+      { error: "Failed to delete free content" },
       { status: 500 }
     );
   }

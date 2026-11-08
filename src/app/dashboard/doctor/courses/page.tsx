@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { PriceBreakdown } from "@/components/video/PriceBreakdown";
 import { BookOpen, Plus, Search, Users, Pencil, Eye } from "lucide-react";
 import { Course, CourseStatus } from "@/types";
 
@@ -215,7 +216,10 @@ export default function DoctorCoursesPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">Price (EGP)</label>
+              {/* FIX: label أوضح إن ده سعر الدكتور الأساسي */}
+              <label className="block text-sm font-medium text-charcoal mb-1">
+                Doctor Base Price (EGP)
+              </label>
               <input
                 type="number"
                 min="0"
@@ -224,8 +228,15 @@ export default function DoctorCoursesPage() {
                 className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-vena-500 focus:border-transparent outline-none text-sm"
                 placeholder="0 for free"
               />
+              <p className="text-[10px] text-charcoal-muted mt-1">Your earnings per enrollment</p>
             </div>
           </div>
+
+          {/* FIX: عرض الـ Price Breakdown تحت حقل السعر */}
+          {form.price && parseFloat(form.price) > 0 && (
+            <PriceBreakdown doctorBase={parseFloat(form.price) || 0} />
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-charcoal mb-1">Language</label>

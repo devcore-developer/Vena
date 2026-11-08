@@ -50,9 +50,15 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
     }
 
     if (course) {
+      // FIX: ضفنا streamvault fields
       previewMedia = await prisma.courseMedia.findFirst({
         where: { courseId: course.id, kind: "PREVIEW", status: "READY" },
-        select: { id: true },
+        select: { 
+          id: true,
+          streamvaultId: true,
+          streamvaultIframe: true,
+          streamvaultThumbnail: true,
+        },
       });
     }
   } catch {
@@ -145,8 +151,15 @@ export default async function CourseDetailPage({ params }: { params: { slug: str
         <div className="lg:col-span-2 space-y-8">
           {/* Preview Video */}
           {previewMedia && (
-            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
-              <VideoPlayer mediaId={previewMedia.id} />
+            <div className="rounded-xl overflow-hidden shadow-lg">
+              {/* FIX: بيمرّر streamvault fields للـ VideoPlayer */}
+              <VideoPlayer
+                mediaId={previewMedia.id}
+                streamvaultId={previewMedia.streamvaultId}
+                streamvaultIframe={previewMedia.streamvaultIframe}
+                poster={previewMedia.streamvaultThumbnail}
+                title={course.title}
+              />
             </div>
           )}
 

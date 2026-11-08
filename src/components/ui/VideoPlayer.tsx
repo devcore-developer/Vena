@@ -2,18 +2,40 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { StreamVaultPlayer } from "@/components/video/StreamVaultPlayer";
 
 interface VideoPlayerProps {
   mediaId: string;
   studentName?: string;
+  /** StreamVault video id (if migrated) */
+  streamvaultId?: string | null;
+  /** StreamVault iframe URL */
+  streamvaultIframe?: string | null;
+  /** Optional poster image */
+  poster?: string | null;
+  /** Optional title for accessibility */
+  title?: string;
 }
 
-export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
+export function VideoPlayer({
+  mediaId,
+  studentName,
+  streamvaultId,
+  streamvaultIframe,
+  poster,
+  title,
+}: VideoPlayerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // التحقق من إن الفيديو متاح للتشغيل قبل تحميله
+    // If we have a StreamVault id, no need to HEAD-check the legacy stream
+    if (streamvaultId) {
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise, check if the legacy Cloudflare/R2 stream is available
     fetch(`/api/media/${mediaId}/stream`, { method: "HEAD" })
       .then((res) => {
         if (!res.ok) {
@@ -24,7 +46,7 @@ export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [mediaId]);
+  }, [mediaId, streamvaultId]);
 
   if (loading) {
     return (
@@ -43,6 +65,30 @@ export function VideoPlayer({ mediaId, studentName }: VideoPlayerProps) {
     );
   }
 
+  // ============================================================
+  // FIX: لو عندنا StreamVault id، استخدم StreamVaultPlayer
+  // ============================================================
+  if (streamvaultId) {
+    return (
+      <div className="space-y-2">
+        <StreamVaultPlayer
+          videoId={streamvaultId}
+          iframeUrl={streamvaultIframe || undefined}
+          title={title}
+          poster={poster || undefined}
+        />
+        {studentName && (
+          <p className="text-xs text-charcoal-muted text-center">
+            🔒 Protected playback — screen recording may produce black frames.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================
+  // Fallback: legacy Cloudflare/R2 stream
+  // ============================================================
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
       <video

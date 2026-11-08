@@ -29,7 +29,13 @@ export async function GET(req: Request) {
     where,
     include: {
       student: { select: { name: true, email: true } },
-      course: { select: { title: true } },
+      course: { 
+        select: { 
+          title: true,
+          doctorBasePrice: true,
+          doctorId: true,
+        } 
+      },
     },
     orderBy: { createdAt: "desc" },
     skip,
@@ -49,20 +55,33 @@ export async function GET(req: Request) {
     counts[s.status] = s._count;
   });
 
-  const data = payments.map((p) => ({
-    id: p.id,
-    studentName: p.student.name,
-    studentEmail: p.student.email,
-    courseTitle: p.course.title,
-    amount: p.amount.toNumber(),
-    currency: p.currency,
-    method: p.method,
-    status: p.status,
-    referenceNumber: p.referenceNumber,
-    hasReceipt: !!p.proofUrl,
-    createdAt: p.createdAt.toISOString(),
-    reviewedAt: p.reviewedAt?.toISOString(),
-  }));
+  const data = payments.map((p) => {
+    // FIX: اقرأ الـ snapshot لو موجود، وإلا احسب من بيانات الكورس
+    const snapshot = p.paymentConfigSnapshot as any;
+    const doctorBase = snapshot?.doctorBase ?? p.course?.doctorBasePrice?.toNumber() ?? 0;
+    const commission = snapshot?.platformCommission ?? Math.round(doctorBase * 0.15 * 100) / 100;
+    const doctorNet = snapshot?.doctorNet ?? doctorBase;
+    
+    return {
+      id: p.id,
+      studentName: p.student.name,
+      studentEmail: p.student.email,
+      courseTitle: p.course.title,
+      // FIX: رجّع التفاصيل المالية كاملة
+      amount: p.amount.toNumber(),          // = studentPrice
+      doctorBase,
+      platformCommission: commission,
+      doctorNet,
+      currency: p.currency,
+      method: p.method,
+      status: p.status,
+      referenceNumber: p.referenceNumber,
+      hasReceipt: !!p.proofUrl,
+      hasSnapshot: !!snapshot,
+      createdAt: p.createdAt.toISOString(),
+      reviewedAt: p.reviewedAt?.toISOString(),
+    };
+  });
 
   return NextResponse.json({
     data,

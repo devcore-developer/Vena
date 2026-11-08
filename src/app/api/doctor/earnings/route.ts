@@ -30,6 +30,7 @@ export async function GET() {
         courseTitle: t.course?.title || "Unknown",
         grossAmount: t.grossAmount.toNumber(),
         commission: t.platformCommission.toNumber(),
+        // FIX: doctorNet هو اللي الدكتور بياخده فعلاً (بدون عمولة المنصة)
         doctorNet: t.doctorNet.toNumber(),
         createdAt: t.createdAt.toISOString(),
       })),

@@ -83,7 +83,19 @@ export default async function SavedResourcesPage() {
                     </p>
                   )}
                   <div className="mt-3 pt-3 border-t border-slate-100">
-                    {item.resource.resourceUrl && (
+                    {/* FIX: لو فيديو، افتح صفحة العرض بدل ما تتنزّل */}
+                    {item.resource.type === "VIDEO" && (
+                      <Button
+                        href={`/free/${item.resource.slug}`}
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                      >
+                        <Video className="mr-1 h-3.5 w-3.5" /> Watch
+                      </Button>
+                    )}
+                    {/* FIX: لو ملف، افتح الرابط مباشرة */}
+                    {item.resource.type !== "VIDEO" && item.resource.resourceUrl && (
                       <Button
                         href={item.resource.resourceUrl}
                         variant="secondary"
@@ -91,16 +103,6 @@ export default async function SavedResourcesPage() {
                         className="w-full"
                       >
                         <ExternalLink className="mr-1 h-3.5 w-3.5" /> Open
-                      </Button>
-                    )}
-                    {item.resource.videoUrl && (
-                      <Button
-                        href={item.resource.videoUrl}
-                        variant="secondary"
-                        size="sm"
-                        className="w-full"
-                      >
-                        <Video className="mr-1 h-3.5 w-3.5" /> Watch
                       </Button>
                     )}
                   </div>

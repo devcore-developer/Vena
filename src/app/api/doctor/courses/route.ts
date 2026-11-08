@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDoctorAccess } from "@/lib/auth-utils";
 import { getPagination } from "@/lib/pagination";
+import { buildPricingBreakdown } from "@/lib/pricing";
 import type { Permission } from "@/types";
 import type { CourseStatus } from "@prisma/client";
 
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status");
 
-  // FIX: استخدم doctorId من session
+  // FIX: استخدم doctorId من session (للدكتور والسكرتيرة)
   const doctorId = auth.session.doctorId || auth.session.userId;
 
   const where = {
@@ -31,7 +32,6 @@ export async function GET(req: Request) {
     where,
     include: {
       category: true,
-      // FIX: include doctor عشان نرجع اسم الدكتور وصورته
       doctor: {
         select: { id: true, name: true, avatarUrl: true },
       },
@@ -47,7 +47,6 @@ export async function GET(req: Request) {
   const data = courses.map((c) => ({
     id: c.id,
     doctorId: c.doctorId,
-    // FIX: رجّع بيانات الدكتور كاملة
     doctorName: c.doctor.name,
     doctorAvatar: c.doctor.avatarUrl || null,
     title: c.title,
@@ -58,7 +57,11 @@ export async function GET(req: Request) {
     thumbnailColor: c.thumbnailColor,
     categoryId: c.categoryId,
     category: c.category?.name || "Uncategorized",
-    price: c.price.toNumber(),
+    // FIX: رجّع doctorBasePrice + studentPrice + commission
+    doctorBasePrice: c.doctorBasePrice?.toNumber() ?? 0,
+    studentPrice: c.price.toNumber(),
+    platformCommission: c.price.toNumber() - (c.doctorBasePrice?.toNumber() ?? 0),
+    price: c.price.toNumber(), // = student price (للتوافق مع الكود القديم)
     status: c.status,
     language: c.language,
     estimatedDuration: c.estimatedDuration,
@@ -86,7 +89,7 @@ export async function POST(req: Request) {
   const auth = await requireDoctorAccess("MANAGE_COURSES" as Permission);
   if (!auth.ok) return auth.response;
 
-  // FIX: لو السكرتيرة بتعمل POST، رفض الطلب (مينفعش سكرتيرة تنشئ كورس)
+  // FIX: السكرتيرة مينفعش تنشئ كورس
   if (auth.session.role === "SECRETARY") {
     return NextResponse.json(
       { error: "Only doctors can create courses" },
@@ -100,6 +103,11 @@ export async function POST(req: Request) {
       where: { id: auth.session.userId },
       select: { name: true, avatarUrl: true },
     });
+
+    // FIX: حسب الـ pricing breakdown
+    // body.price هنا هو doctor base price اللي الدكتور دخله
+    const doctorBase = parseFloat(body.price) || 0;
+    const breakdown = buildPricingBreakdown(doctorBase);
 
     const slug =
       body.slug ||
@@ -118,7 +126,10 @@ export async function POST(req: Request) {
         thumbnail: body.thumbnailColor || "bg-charcoal",
         thumbnailColor: body.thumbnailColor || "bg-charcoal",
         categoryId: body.categoryId || null,
-        price: parseFloat(body.price) || 0,
+        // FIX: خزّن doctorBase + studentPrice + commissionRate
+        doctorBasePrice: doctorBase,
+        platformCommissionRate: 0.15,
+        price: breakdown.studentPrice, // student price = doctorBase + 15%
         status: "DRAFT",
         language: body.language || "ENGLISH",
         estimatedDuration: parseInt(body.estimatedDuration) || 0,
@@ -130,11 +141,15 @@ export async function POST(req: Request) {
       id: newCourse.id,
       doctorId: newCourse.doctorId,
       doctorName: user?.name,
-      doctorAvatar: user?.avatarUrl || null, // FIX
+      doctorAvatar: user?.avatarUrl || null,
       title: newCourse.title,
       slug: newCourse.slug,
       status: newCourse.status,
-      price: newCourse.price.toNumber(),
+      // FIX: رجّع الـ breakdown للـ frontend
+      doctorBasePrice: newCourse.doctorBasePrice?.toNumber() ?? 0,
+      studentPrice: newCourse.price.toNumber(),
+      platformCommission: breakdown.platformCommission,
+      price: newCourse.price.toNumber(), // student price (للتوافق)
       isFree: newCourse.price.toNumber() === 0,
       targetYear: newCourse.targetYear,
       createdAt: newCourse.createdAt.toISOString(),
@@ -147,4 +162,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

@@ -5,7 +5,12 @@ import { normalizeYouTubeUrl } from "@/lib/youtube";
 import { detectVideoSource } from "@/lib/free-video-storage";
 
 // ============================================================
-// GET /api/admin/free — List all free videos (any status)
+// GET /api/admin/free-vena — List all free content (VIDEO + PDF)
+//
+// Query params:
+//   search  — title contains
+//   status  — DRAFT | PUBLISHED | ARCHIVED | ALL
+//   type    — VIDEO | PDF | ALL  (NEW)
 // ============================================================
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin();
@@ -14,11 +19,14 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const search = url.searchParams.get("search") || "";
-    const status = url.searchParams.get("status"); // DRAFT | PUBLISHED | ARCHIVED
-    const source = url.searchParams.get("source"); // upload | youtube
+    const status = url.searchParams.get("status");
+    const typeFilter = url.searchParams.get("type"); // VIDEO | PDF | ALL
 
-    const where = {
-      type: "VIDEO" as const,
+    const where: any = {
+      // Include both VIDEO and PDF types
+      type: typeFilter && typeFilter !== "ALL"
+        ? typeFilter as "VIDEO" | "PDF"
+        : { in: ["VIDEO", "PDF"] },
       ...(search
         ? { title: { contains: search, mode: "insensitive" as const } }
         : {}),
@@ -33,43 +41,44 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    // Decorate with detected source for the UI
     const data = resources.map((r) => ({
       id: r.id,
       title: r.title,
       slug: r.slug,
       description: r.description,
-      type: r.type,
+      type: r.type, // "VIDEO" | "PDF"
       status: r.status,
       isFeatured: r.isFeatured,
       thumbnail: r.thumbnail,
       content: r.content,
       resourceUrl: r.resourceUrl,
       videoUrl: r.videoUrl,
+      streamvaultId: r.streamvaultId,
+      streamvaultIframe: r.streamvaultIframe,
+      streamvaultThumbnail: r.streamvaultThumbnail,
       categoryId: r.categoryId,
       categoryName: r.category?.name || null,
-      source: detectVideoSource({ resourceUrl: r.resourceUrl, videoUrl: r.videoUrl }),
+      // For VIDEO: detect source; for PDF: always "upload"
+      source:
+        r.type === "PDF"
+          ? "upload"
+          : detectVideoSource({ resourceUrl: r.resourceUrl, videoUrl: r.videoUrl }),
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
 
-    // Optional client-side source filter (since it's derived, not stored)
-    const filtered = source && source !== "ALL"
-      ? data.filter((d) => d.source === source)
-      : data;
-
-    return NextResponse.json({ data: filtered, total: filtered.length });
+    return NextResponse.json({ data, total: data.length });
   } catch (error) {
-    console.error("[admin/free] GET error:", error);
+    console.error("[admin/free-vena] GET error:", error);
     return NextResponse.json(
-      { error: "Failed to load free videos" },
+      { error: "Failed to load free content" },
       { status: 500 }
     );
   }
 }
 
 // ============================================================
-// POST /api/admin/free — Create a new free video
+// POST /api/admin/free-vena — Create new free content (VIDEO or PDF)
 // ============================================================
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin();
@@ -88,47 +97,58 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Source = 'upload' or 'youtube' (or both, if admin provides both)
-    const source: string = body.source || "youtube";
+    const contentType: "VIDEO" | "PDF" = body.type === "PDF" ? "PDF" : "VIDEO";
 
     let resourceUrl: string | null = null;
     let videoUrl: string | null = null;
 
-    if (source === "upload") {
+    if (contentType === "VIDEO") {
+      const source: string = body.source || "youtube";
+
+      if (source === "upload") {
+        if (!body.resourceUrl?.trim()) {
+          return NextResponse.json(
+            { error: "Uploaded video URL is required when source is 'upload'" },
+            { status: 400 }
+          );
+        }
+        resourceUrl = body.resourceUrl.trim();
+      }
+      if (source === "youtube") {
+        if (!body.videoUrl?.trim()) {
+          return NextResponse.json(
+            { error: "YouTube URL is required when source is 'youtube'" },
+            { status: 400 }
+          );
+        }
+        const normalized = normalizeYouTubeUrl(body.videoUrl);
+        if (!normalized) {
+          return NextResponse.json(
+            { error: "Invalid YouTube URL" },
+            { status: 400 }
+          );
+        }
+        videoUrl = normalized;
+      }
+
+      if (body.resourceUrl?.trim() && source === "youtube") {
+        resourceUrl = body.resourceUrl.trim();
+      }
+      if (body.videoUrl?.trim() && source === "upload") {
+        const normalized = normalizeYouTubeUrl(body.videoUrl);
+        if (normalized) videoUrl = normalized;
+      }
+    } else if (contentType === "PDF") {
       if (!body.resourceUrl?.trim()) {
         return NextResponse.json(
-          { error: "Uploaded video URL is required when source is 'upload'" },
+          {
+            error: "PDF document URL is required for PDF content",
+            messageAr: "يجب رفع ملف PDF قبل الحفظ",
+          },
           { status: 400 }
         );
       }
       resourceUrl = body.resourceUrl.trim();
-    }
-
-    if (source === "youtube") {
-      if (!body.videoUrl?.trim()) {
-        return NextResponse.json(
-          { error: "YouTube URL is required when source is 'youtube'" },
-          { status: 400 }
-        );
-      }
-
-      const normalized = normalizeYouTubeUrl(body.videoUrl);
-      if (!normalized) {
-        return NextResponse.json(
-          { error: "Invalid YouTube URL. Please provide a valid YouTube link." },
-          { status: 400 }
-        );
-      }
-      videoUrl = normalized;
-    }
-
-    // Also accept direct values (in case frontend sent both)
-    if (body.resourceUrl?.trim() && source === "youtube") {
-      resourceUrl = body.resourceUrl.trim();
-    }
-    if (body.videoUrl?.trim() && source === "upload") {
-      const normalized = normalizeYouTubeUrl(body.videoUrl);
-      if (normalized) videoUrl = normalized;
     }
 
     // Generate slug
@@ -161,7 +181,7 @@ export async function POST(req: NextRequest) {
         title: body.title.trim(),
         slug,
         description: body.description?.trim() || null,
-        type: "VIDEO",
+        type: contentType, // VIDEO or PDF
         content: body.content?.trim() || null,
         thumbnail: body.thumbnail?.trim() || null,
         resourceUrl,
@@ -175,14 +195,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         actorId: auth.session.userId,
-        action: "FREE_VIDEO_CREATED",
+        action: "FREE_CONTENT_CREATED",
         entityType: "FreeResource",
         entityId: resource.id,
-        metadata: { source, title: resource.title },
+        metadata: { type: contentType, title: resource.title },
       },
     });
 
@@ -190,19 +209,16 @@ export async function POST(req: NextRequest) {
       id: resource.id,
       title: resource.title,
       slug: resource.slug,
+      type: resource.type,
       status: resource.status,
-      source: detectVideoSource({
-        resourceUrl: resource.resourceUrl,
-        videoUrl: resource.videoUrl,
-      }),
       resourceUrl: resource.resourceUrl,
       videoUrl: resource.videoUrl,
       createdAt: resource.createdAt.toISOString(),
     });
   } catch (error) {
-    console.error("[admin/free] POST error:", error);
+    console.error("[admin/free-vena] POST error:", error);
     return NextResponse.json(
-      { error: "Failed to create free video" },
+      { error: "Failed to create free content" },
       { status: 500 }
     );
   }

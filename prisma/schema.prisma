@@ -148,12 +148,15 @@ model Course {
   doctor            User                   @relation(fields: [doctorId], references: [id])
   media             CourseMedia[]
   sections          CourseSection[]
-  lessons           CourseLesson[] // العلاقة العكسية للدروس المستقلة
+  lessons           CourseLesson[]
   conversations     DoctorConversation[]
   enrollments       Enrollment[]
   exams             Exam[]
   financialTx       FinancialTransaction[]
   payments          Payment[]
+  // Pricing — doctor base + commission breakdown
+  doctorBasePrice        Decimal? @db.Decimal(10, 2)
+  platformCommissionRate Decimal? @db.Decimal(5, 4) @default(0.15)
 
   @@index([doctorId])
   @@index([categoryId])
@@ -175,8 +178,8 @@ model CourseSection {
 
 model CourseLesson {
   id             String           @id @default(cuid())
-  sectionId      String? // أصبح اختياري
-  courseId       String? // حقل جديد للدروس المستقلة
+  sectionId      String?
+  courseId       String?
   title          String
   description    String?
   type           LessonType
@@ -189,9 +192,12 @@ model CourseLesson {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   mediaId        String?
-  section        CourseSection?   @relation(fields: [sectionId], references: [id], onDelete: Cascade) // العلاقة أصبحت اختيارية
-  course         Course?          @relation(fields: [courseId], references: [id]) // العلاقة الجديدة
+  section        CourseSection?   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  course         Course?          @relation(fields: [courseId], references: [id])
   lessonProgress LessonProgress[]
+
+  // ✅ العلاقة دي زي ما هي
+  media          CourseMedia?     @relation(fields: [mediaId], references: [id])
 
   @@index([sectionId])
   @@index([courseId])
@@ -527,6 +533,12 @@ model FreeResource {
   updatedAt   DateTime            @updatedAt
   category    CourseCategory?     @relation(fields: [categoryId], references: [id])
   savedBy     SavedFreeResource[]
+  // StreamVault integration
+  streamvaultId        String?
+  streamvaultIframe    String?
+  streamvaultHls        String?
+  streamvaultStatus    Int?    @default(0)
+  streamvaultThumbnail String?
 
   @@index([categoryId])
   @@index([status])
@@ -625,9 +637,17 @@ model CourseMedia {
   uploadedById  String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-  streamvaultId String?
+  // StreamVault integration
+  streamvaultId        String?
+  streamvaultIframe    String?
+  streamvaultHls        String?
+  streamvaultStatus    Int?    @default(0)
+  streamvaultThumbnail String?
   course        Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
   uploadedBy    User        @relation(fields: [uploadedById], references: [id])
+
+  // ✅ عدّل ده لـ CourseLesson[] (one-to-many)
+  lessons       CourseLesson[]
 
   @@index([courseId])
   @@index([kind])

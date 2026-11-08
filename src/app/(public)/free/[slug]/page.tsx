@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Video, Youtube, ArrowLeft, Calendar, Tag } from "lucide-react";
+import { StreamVaultPlayer } from "@/components/video/StreamVaultPlayer";
+import { PdfViewer } from "@/components/pdf/PdfViewer";
+import { Video, Youtube, UploadCloud, FileText, ArrowLeft, Calendar, Tag } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -11,9 +13,9 @@ import {
 } from "@/lib/free-video-storage";
 import { getYouTubeEmbedUrl } from "@/lib/youtube";
 
-export const metadata = { title: "Free VENA Video" };
+export const metadata = { title: "Free VENA Content" };
 
-async function getFreeVideo(slug: string) {
+async function getFreeContent(slug: string) {
   const resource = await prisma.freeResource.findUnique({
     where: { slug },
     include: {
@@ -21,7 +23,11 @@ async function getFreeVideo(slug: string) {
     },
   });
 
-  if (!resource || resource.type !== "VIDEO" || resource.status !== "PUBLISHED") {
+  if (
+    !resource ||
+    !["VIDEO", "PDF"].includes(resource.type) ||
+    resource.status !== "PUBLISHED"
+  ) {
     return null;
   }
 
@@ -36,17 +42,18 @@ function formatDate(date: Date): string {
   });
 }
 
-export default async function FreeVideoPage({
+export default async function FreeContentPage({
   params,
 }: {
   params: { slug: string };
 }) {
-  const resource = await getFreeVideo(params.slug);
+  const resource = await getFreeContent(params.slug);
 
   if (!resource) {
     notFound();
   }
 
+  const isPdf = resource.type === "PDF";
   const source = detectVideoSource({
     resourceUrl: resource.resourceUrl,
     videoUrl: resource.videoUrl,
@@ -54,16 +61,16 @@ export default async function FreeVideoPage({
 
   // For uploaded videos, verify the blob still exists
   let uploadVerified = true;
-  if (source === "upload" && resource.resourceUrl) {
+  if (!isPdf && source === "upload" && resource.resourceUrl) {
     uploadVerified = await verifyVideoExists(resource.resourceUrl);
   }
 
-  // Build related videos (same category, published, excluding current)
+  // Build related content (same category, published, excluding current)
   let related: any[] = [];
   try {
     related = await prisma.freeResource.findMany({
       where: {
-        type: "VIDEO",
+        type: { in: ["VIDEO", "PDF"] },
         status: "PUBLISHED",
         id: { not: resource.id },
         ...(resource.categoryId
@@ -78,6 +85,7 @@ export default async function FreeVideoPage({
         thumbnail: true,
         resourceUrl: true,
         videoUrl: true,
+        type: true,
         isFeatured: true,
         createdAt: true,
       },
@@ -99,11 +107,19 @@ export default async function FreeVideoPage({
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main video column */}
+        {/* Main content column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Video player */}
-          <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
-            {source === "youtube" && resource.videoUrl ? (
+          {/* Content viewer */}
+          {isPdf ? (
+            // PDF viewer
+            <PdfViewer
+              url={resource.resourceUrl!}
+              title={resource.title}
+              allowDownload={false}
+            />
+          ) : source === "youtube" && resource.videoUrl ? (
+            // YouTube embed
+            <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
               <iframe
                 src={getYouTubeEmbedUrl(resource.videoUrl) || ""}
                 title={resource.title}
@@ -112,8 +128,18 @@ export default async function FreeVideoPage({
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
-            ) : source === "upload" && resource.resourceUrl ? (
-              uploadVerified ? (
+            </div>
+          ) : source === "upload" && resource.resourceUrl ? (
+            // Uploaded video — use StreamVaultPlayer if migrated, else fallback <video>
+            resource.streamvaultId ? (
+              <StreamVaultPlayer
+                videoId={resource.streamvaultId}
+                iframeUrl={resource.streamvaultIframe || undefined}
+                title={resource.title}
+                poster={resource.streamvaultThumbnail || undefined}
+              />
+            ) : uploadVerified ? (
+              <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
                 <video
                   src={resource.resourceUrl}
                   controls
@@ -122,34 +148,36 @@ export default async function FreeVideoPage({
                 >
                   Your browser does not support the video tag.
                 </video>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80">
-                  <Video className="h-12 w-12 mb-3" />
-                  <p className="text-sm">Video file is no longer available</p>
-                  <p className="text-xs text-white/50 mt-1">
-                    Please contact support
-                  </p>
-                </div>
-              )
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80">
-                <Video className="h-12 w-12 mb-3" />
-                <p className="text-sm">No video source available</p>
               </div>
-            )}
-          </div>
+            ) : (
+              <div className="bg-slate-100 aspect-video rounded-xl flex flex-col items-center justify-center p-6">
+                <Video className="h-10 w-10 text-charcoal-muted mb-3" />
+                <p className="text-sm text-charcoal">Video file is no longer available</p>
+                <p className="text-xs text-charcoal-muted mt-1">Please contact support</p>
+              </div>
+            )
+          ) : (
+            <div className="bg-slate-100 aspect-video rounded-xl flex flex-col items-center justify-center p-6">
+              <FileText className="h-10 w-10 text-charcoal-muted mb-3" />
+              <p className="text-sm text-charcoal">No content available</p>
+            </div>
+          )}
 
           {/* Title + meta */}
           <div>
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <Badge variant="info">
-                {source === "youtube" ? (
+                {isPdf ? (
+                  <>
+                    <FileText size={10} className="mr-1" /> PDF Document
+                  </>
+                ) : source === "youtube" ? (
                   <>
                     <Youtube size={10} className="mr-1" /> YouTube
                   </>
                 ) : (
                   <>
-                    <Video size={10} className="mr-1" /> Uploaded
+                    <Video size={10} className="mr-1" /> Uploaded Video
                   </>
                 )}
               </Badge>
@@ -158,9 +186,7 @@ export default async function FreeVideoPage({
                   <Tag size={10} className="mr-1" /> {resource.category.name}
                 </Badge>
               )}
-              {resource.isFeatured && (
-                <Badge variant="warning">Featured</Badge>
-              )}
+              {resource.isFeatured && <Badge variant="warning">Featured</Badge>}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold text-charcoal mb-3">
@@ -179,7 +205,7 @@ export default async function FreeVideoPage({
           {resource.description && (
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-charcoal uppercase tracking-wide mb-2">
-                About this video
+                About this {isPdf ? "document" : "video"}
               </h2>
               <p className="text-sm text-charcoal-muted leading-relaxed whitespace-pre-wrap">
                 {resource.description}
@@ -191,7 +217,7 @@ export default async function FreeVideoPage({
           {resource.content && (
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-charcoal uppercase tracking-wide mb-3">
-                Transcript / Notes
+                {isPdf ? "Notes" : "Transcript / Notes"}
               </h2>
               <div className="prose prose-sm max-w-none text-charcoal-muted whitespace-pre-wrap">
                 {resource.content}
@@ -200,37 +226,47 @@ export default async function FreeVideoPage({
           )}
         </div>
 
-        {/* Sidebar — related videos */}
+        {/* Sidebar — related content */}
         <div className="lg:col-span-1 space-y-4">
           <h2 className="text-sm font-semibold text-charcoal uppercase tracking-wide">
-            Related Videos
+            Related Content
           </h2>
 
           {related.length === 0 ? (
             <Card className="p-4 text-center">
               <p className="text-xs text-charcoal-muted">
-                No related videos yet.
+                No related content yet.
               </p>
             </Card>
           ) : (
             <div className="space-y-3">
               {related.map((r) => {
+                const rIsPdf = r.type === "PDF";
                 const rSource = detectVideoSource({
                   resourceUrl: r.resourceUrl,
                   videoUrl: r.videoUrl,
                 });
+                const rIsYoutube =
+                  rSource === "youtube" ||
+                  (r.videoUrl && (r.videoUrl.includes("youtube.com") || r.videoUrl.includes("youtu.be")));
+
                 return (
                   <Link href={`/free/${r.slug}`} key={r.id}>
                     <Card className="p-3 flex gap-3 hover:shadow-hover transition-shadow cursor-pointer">
                       <div
                         className={`w-20 h-12 shrink-0 rounded-md flex items-center justify-center ${
-                          r.thumbnail || "bg-vena-500"
+                          r.thumbnail ||
+                          (rIsPdf ? "bg-amber-500" : "bg-vena-500")
                         }`}
                       >
-                        {rSource === "youtube" ? (
-                          <Youtube className="text-white/90" size={16} />
-                        ) : (
-                          <Video className="text-white/90" size={16} />
+                        {!r.thumbnail && (
+                          rIsPdf ? (
+                            <FileText className="text-white/90" size={16} />
+                          ) : rIsYoutube ? (
+                            <Youtube className="text-white/90" size={16} />
+                          ) : (
+                            <UploadCloud className="text-white/90" size={16} />
+                          )
                         )}
                       </div>
                       <div className="flex-1 min-w-0">

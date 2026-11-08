@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireStudent } from "@/lib/auth-utils";
+import { requireStudent } from "@/lib/auth-utils";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client, R2_BUCKET_NAME } from "@/lib/r2";
 import { Readable } from "stream";
@@ -24,9 +24,10 @@ export async function GET(
 
   // Authorization
   if (media.kind === "PREVIEW") {
-    const auth = await requireAuth();
-    if (!auth.ok) return auth.response;
+    // FIX: سمحت للـ PREVIEW videos بالتشغيل بدون تسجيل دخول
+    // عشان أي طالب يقدر يشوف الـ preview قبل ما يشترك
   } else {
+    // لو الفيديو مش preview، لازم الطالب يكون مسجل دخول ومشترك في الكورس
     const auth = await requireStudent();
     if (!auth.ok) return auth.response;
 
@@ -82,19 +83,36 @@ export async function GET(
       return new NextResponse("Stream error", { status: 500 });
     }
 
-    // Convert NodeJS.ReadableStream to Web ReadableStream
+    // FIX: حل إيرور Controller is already closed
+    // استخدمنا cancel عشان نلغي الـ stream لو الـ client قفل الـ connection
     const nodeStream = response.Body as Readable;
     const webStream = new ReadableStream({
       start(controller) {
         nodeStream.on("data", (chunk) => {
-          controller.enqueue(new Uint8Array(chunk));
+          try {
+            controller.enqueue(new Uint8Array(chunk));
+          } catch (e) {
+            // Controller might be closed if client disconnected
+          }
         });
         nodeStream.on("end", () => {
-          controller.close();
+          try {
+            controller.close();
+          } catch (e) {
+            // Already closed
+          }
         });
         nodeStream.on("error", (err) => {
-          controller.error(err);
+          try {
+            controller.error(err);
+          } catch (e) {
+            // Already closed
+          }
         });
+      },
+      cancel() {
+        // FIX: لما الـ client يقفل الـ connection، خلص الـ nodeStream
+        nodeStream.destroy();
       },
     });
 

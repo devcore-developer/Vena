@@ -18,8 +18,14 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     sectionTitle: "", // Optional section
   });
   
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [uploadedMediaId, setUploadedMediaId] = useState<string | null>(null);
+  const [streamvaultData, setStreamvaultData] = useState<{
+    videoId: string;
+    iframeLink: string;
+    size: number;
+    mimeType: string;
+    fileName: string;
+  } | null>(null);
+  
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
@@ -29,56 +35,59 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     setUploading(true);
     setError("");
     setUploadProgress(0);
-    setVideoFile(file);
 
     try {
-      const res = await fetch(`/api/doctor/courses/${params.courseId}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: form.isPreview ? "PREVIEW" : "LECTURE",
-          fileName: file.name,
-          mimeType: file.type,
-          size: file.size,
-        }),
-      });
+      const formData = new FormData();
+      formData.append("file", file);
 
-      if (!res.ok) throw new Error("Failed to get upload URL");
-      const { mediaId, uploadUrl } = await res.json();
+      // FIX: رفع الفيديو على StreamVault عبر الـ upload route الجديد
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/admin/streamvault/upload");
 
-      // 2. Upload to R2 directly using PUT
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", uploadUrl, true);
-        xhr.setRequestHeader("Content-Type", file.type); // رجعنا الـ Content-Type
-        
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const progress = Math.round((e.loaded / e.total) * 90);
-            setUploadProgress(progress);
-          }
-        };
-        
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const progress = Math.round((e.loaded / e.total) * 90);
+          setUploadProgress(progress);
+        }
+      };
+
+      const uploadPromise = new Promise<any>((resolve, reject) => {
         xhr.onload = () => {
-          if (xhr.status === 200 || xhr.status === 201) {
-            setUploadProgress(100);
-            resolve();
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              resolve(res);
+            } catch (e) {
+              reject(new Error("Invalid response from server"));
+            }
           } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
+            try {
+              const res = JSON.parse(xhr.responseText);
+              reject(new Error(res.error || `Upload failed (HTTP ${xhr.status})`));
+            } catch {
+              reject(new Error(`Upload failed (HTTP ${xhr.status})`));
+            }
           }
         };
-        
         xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.send(file);
       });
 
-      const completeRes = await fetch(`/api/doctor/courses/${params.courseId}/media/${mediaId}/complete`, {
-        method: "POST",
+      xhr.send(formData);
+      const result = await uploadPromise;
+
+      if (!result.videoId || !result.iframeLink) {
+        throw new Error("StreamVault did not return video ID or iframe link");
+      }
+
+      setStreamvaultData({
+        videoId: result.videoId,
+        iframeLink: result.iframeLink,
+        size: result.size || file.size,
+        mimeType: file.type,
+        fileName: file.name,
       });
-
-      if (!completeRes.ok) throw new Error("Failed to verify upload");
-
-      setUploadedMediaId(mediaId);
+      
+      setUploadProgress(100);
       
     } catch (e: any) {
       setError(e.message || "Upload failed");
@@ -93,6 +102,31 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
     setError("");
 
     try {
+      // لو الفيديو اترفع, اعمل media record الأول
+      let mediaId: string | undefined = undefined;
+
+      if (form.type === "VIDEO" && streamvaultData) {
+        const mediaRes = await fetch(`/api/doctor/courses/${params.courseId}/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: form.isPreview ? "PREVIEW" : "LECTURE",
+            fileName: streamvaultData.fileName,
+            mimeType: streamvaultData.mimeType,
+            size: streamvaultData.size,
+            streamvaultId: streamvaultData.videoId,
+            streamvaultIframe: streamvaultData.iframeLink,
+          }),
+        });
+
+        if (!mediaRes.ok) {
+          const err = await mediaRes.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to create media record");
+        }
+        const mediaData = await mediaRes.json();
+        mediaId = mediaData.mediaId;
+      }
+
       const res = await fetch(`/api/doctor/courses/${params.courseId}/lessons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,8 +137,8 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
           duration: parseInt(String(form.duration)) || 0,
           isPreview: form.isPreview,
           isPublished: form.isPublished,
-          sectionTitle: form.sectionTitle || null, // Send null if empty
-          mediaId: form.type === "VIDEO" ? uploadedMediaId : undefined,
+          sectionTitle: form.sectionTitle || null,
+          mediaId: mediaId,
         }),
       });
 
@@ -148,14 +182,14 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
 
           {form.type === "VIDEO" && (
             <div className="space-y-3 p-4 bg-vena-50/50 rounded-lg border border-vena-100">
-              <label className="block text-sm font-medium text-charcoal">Upload Video (Cloudflare R2)</label>
+              <label className="block text-sm font-medium text-charcoal">Upload Video (StreamVault)</label>
               <input 
                 type="file" 
                 accept="video/mp4,video/webm" 
                 onChange={(e) => e.target.files?.[0] && handleVideoUpload(e.target.files[0])}
                 className="hidden" 
                 id="video-upload"
-                disabled={uploading || !!uploadedMediaId}
+                disabled={uploading || !!streamvaultData}
               />
               <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-vena-200 rounded-lg p-6 hover:bg-vena-50">
                 {uploading ? (
@@ -166,15 +200,17 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
                       <div className="h-full bg-vena-500 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
                     </div>
                   </>
-                ) : uploadedMediaId ? (
+                ) : streamvaultData ? (
                   <div className="text-center text-vena-600">
                     <CheckCircle className="mx-auto mb-2" size={24} />
                     <p className="text-sm font-medium">Video uploaded successfully</p>
+                    <p className="text-xs text-charcoal-muted mt-1">StreamVault ID: {streamvaultData.videoId.substring(0, 12)}...</p>
                   </div>
                 ) : (
                   <>
                     <Upload className="mx-auto text-charcoal-muted mb-2" size={24} />
-                    <p className="text-sm text-charcoal-muted">Click to upload video (Max 250MB)</p>
+                    <p className="text-sm text-charcoal-muted">Click to upload video (Max 500MB)</p>
+                    <p className="text-xs text-vena-600 mt-1">Processed by StreamVault</p>
                   </>
                 )}
               </label>
@@ -212,7 +248,7 @@ export default function NewLessonPage({ params }: { params: { courseId: string }
 
           <div className="flex gap-3 pt-4 border-t border-vena-50">
             <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
-            <Button type="submit" isLoading={saving} disabled={form.type === "VIDEO" && !uploadedMediaId}>
+            <Button type="submit" isLoading={saving} disabled={form.type === "VIDEO" && !streamvaultData}>
               <Save className="mr-2 h-4 w-4" /> Create Lesson
             </Button>
           </div>

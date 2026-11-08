@@ -19,9 +19,18 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
   if (!session) redirect("/login");
   if (session.role !== "STUDENT" && session.role !== "DOCTOR" && session.role !== "SUPER_ADMIN") redirect("/dashboard");
 
+  // FIX: عشان نجيب streamvault fields من CourseMedia المرتبطة بالـ lesson
+  const mediaInclude = {
+    select: {
+      id: true,
+      streamvaultId: true,
+      streamvaultIframe: true,
+      streamvaultThumbnail: true,
+    },
+  };
+
   let course: any = null;
   try {
-    // Try to find by slug OR id
     course = await prisma.course.findFirst({
       where: {
         OR: [
@@ -33,12 +42,19 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
       include: {
         doctor: { select: { name: true } },
         sections: {
-          include: { lessons: { where: { isPublished: true }, orderBy: { order: "asc" } } },
+          include: { 
+            lessons: { 
+              where: { isPublished: true }, 
+              orderBy: { order: "asc" },
+              include: { media: mediaInclude },
+            } 
+          },
           orderBy: { order: "asc" },
         },
         lessons: {
           where: { isPublished: true, sectionId: null },
           orderBy: { order: "asc" },
+          include: { media: mediaInclude },
         },
       },
     });
@@ -55,12 +71,18 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
         include: {
           doctor: { select: { name: true } },
           sections: {
-            include: { lessons: { orderBy: { order: "asc" } } },
+            include: { 
+              lessons: { 
+                orderBy: { order: "asc" },
+                include: { media: mediaInclude },
+              } 
+            },
             orderBy: { order: "asc" },
           },
           lessons: {
             where: { sectionId: null },
             orderBy: { order: "asc" },
+            include: { media: mediaInclude },
           },
         },
       });
@@ -122,6 +144,10 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
         isPreview: l.isPreview,
         isCompleted: progressMap.get(l.id) || false,
         mediaId: l.mediaId || undefined,
+        // FIX: مرّر streamvault fields
+        streamvaultId: l.media?.streamvaultId || null,
+        streamvaultIframe: l.media?.streamvaultIframe || null,
+        streamvaultThumbnail: l.media?.streamvaultThumbnail || null,
       })),
     })),
     lessons: course.lessons.map((l: any) => ({
@@ -134,6 +160,10 @@ export default async function LearnPage({ params }: { params: { courseSlug: stri
       isPreview: l.isPreview,
       isCompleted: progressMap.get(l.id) || false,
       mediaId: l.mediaId || undefined,
+      // FIX: مرّر streamvault fields
+      streamvaultId: l.media?.streamvaultId || null,
+      streamvaultIframe: l.media?.streamvaultIframe || null,
+      streamvaultThumbnail: l.media?.streamvaultThumbnail || null,
     })),
     enrollment: {
       id: "preview",

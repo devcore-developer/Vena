@@ -18,11 +18,8 @@ interface Category {
 }
 
 interface FreeVideoFormProps {
-  /** Mode determines the API endpoint. */
   mode: "create" | "edit";
-  /** Existing resource ID (edit mode only). */
   resourceId?: string;
-  /** Initial values (edit mode only). */
   initial?: {
     title?: string | null;
     slug?: string | null;
@@ -36,7 +33,6 @@ interface FreeVideoFormProps {
     isFeatured?: boolean | null;
     source?: "upload" | "youtube" | null;
   };
-  /** Categories fetched on the server side. */
   categories: Category[];
 }
 
@@ -58,11 +54,8 @@ export function FreeVideoForm({
   const [status, setStatus] = useState<Status>(
     (initial?.status as Status) || "DRAFT"
   );
-  const [isFeatured, setIsFeatured] = useState(
-    initial?.isFeatured || false
-  );
+  const [isFeatured, setIsFeatured] = useState(initial?.isFeatured || false);
 
-  // Source + URL state — initialize from existing record (edit mode)
   const [source, setSource] = useState<VideoSource>(
     initial?.source === "upload" ? "upload" : "youtube"
   );
@@ -76,12 +69,6 @@ export function FreeVideoForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // When source changes, we DON'T clear the other URL — that way the admin can
-  // switch tabs without losing their work. The backend handles the cleanup logic.
-
-  // --------------------------------------------------------
-  // Submit
-  // --------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -93,13 +80,11 @@ export function FreeVideoForm({
       setSaving(false);
       return;
     }
-
     if (source === "upload" && !resourceUrl) {
       setError("Please upload a video file before saving");
       setSaving(false);
       return;
     }
-
     if (source === "youtube" && !videoUrl) {
       setError("Please enter a valid YouTube URL before saving");
       setSaving(false);
@@ -120,29 +105,27 @@ export function FreeVideoForm({
         videoUrl,
       };
 
-    // في الـ handleSubmit، عدّل الأسطر دي:
+      // FIX: استخدام free-vena في المسار (مش free)
+      const url =
+        mode === "create"
+          ? "/api/admin/free-vena"
+          : `/api/admin/free-vena/${resourceId}`;
+      const method = mode === "create" ? "POST" : "PUT";
 
-    const url =
-    mode === "create"
-        ? "/api/admin/free-vena"
-        : `/api/admin/free-vena/${resourceId}`;
-    const method = mode === "create" ? "POST" : "PUT";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    const res = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save");
+      }
 
-    if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || "Failed to save");
-    }
-
-    const data = await res.json();
-    // Redirect to list page
-    router.push("/dashboard/admin/free-vena");
-    router.refresh();
+      // Redirect to list page
+      router.push("/dashboard/admin/free-vena");
+      router.refresh();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -247,7 +230,6 @@ export function FreeVideoForm({
               </div>
             )}
 
-            {/* Cross-source preservation note */}
             {mode === "edit" &&
               source === "upload" &&
               initial?.source === "youtube" &&

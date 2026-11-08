@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { PriceBreakdown } from "@/components/video/PriceBreakdown";
+import { reverseDoctorBaseFromStudentPrice } from "@/lib/pricing";
 import {
   CreditCard,
   Loader2,
@@ -158,11 +160,6 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
         return;
       }
 
-      // If existing payment, show info message but proceed to step 2
-      if (data.existing) {
-        // Don't show error, just proceed to receipt upload
-      }
-
       setPayment(data);
       setStep(2);
     } catch {
@@ -241,6 +238,9 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
       </Card>
     );
   }
+
+  // FIX: احسب الـ breakdown من الـ student price
+  const doctorBase = course ? reverseDoctorBaseFromStudentPrice(course.price) : 0;
 
   // ============================================================
   // FREE COURSE CHECKOUT
@@ -456,6 +456,11 @@ export default function CheckoutPage({ params }: { params: { courseId: string } 
                 {course.price} EGP
               </p>
             </div>
+          </div>
+          
+          {/* FIX: أضف الـ Price Breakdown تحت السعر */}
+          <div className="mt-4 pt-4 border-t border-vena-50">
+            <PriceBreakdown doctorBase={doctorBase} variant="inline" />
           </div>
         </Card>
       )}

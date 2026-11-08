@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDoctorAccess } from "@/lib/auth-utils";
-import { generatePresignedUploadUrl, generateObjectKey } from "@/lib/r2";
-import { canUpload } from "@/lib/storage-quota";
 import type { Permission } from "@/types";
 
-const MAX_PREVIEW_SIZE = 50 * 1024 * 1024; // 50 MB
-const MAX_LECTURE_SIZE = 250 * 1024 * 1024; // 250 MB
+const MAX_PREVIEW_SIZE = 500 * 1024 * 1024; // 500 MB (StreamVault limit)
+const MAX_LECTURE_SIZE = 500 * 1024 * 1024; // 500 MB
 
 export async function POST(
   req: Request,
@@ -27,10 +25,10 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { kind, fileName, mimeType, size } = body;
+    const { kind, fileName, mimeType, size, streamvaultId, streamvaultIframe } = body;
 
-    if (!kind || !fileName || !mimeType || !size) {
-      return NextResponse.json({ error: "Missing upload metadata" }, { status: 400 });
+    if (!kind || !fileName || !mimeType || !size || !streamvaultId || !streamvaultIframe) {
+      return NextResponse.json({ error: "Missing upload metadata or StreamVault data" }, { status: 400 });
     }
 
     // 2. Validate Size & Type
@@ -52,48 +50,31 @@ export async function POST(
       return NextResponse.json({ error: `File exceeds ${maxMB}MB limit` }, { status: 400 });
     }
 
-    // 3. Check Storage Quota
-    const quotaCheck = await canUpload(auth.session.userId, size);
-    if (!quotaCheck.allowed) {
-      return NextResponse.json({ error: quotaCheck.reason }, { status: 400 });
-    }
-
-    // 4. Create Pending Media Record
+    // 3. Create Media Record with StreamVault data
     const media = await prisma.courseMedia.create({
       data: {
         courseId: params.courseId,
         kind,
-        objectKey: "pending", // temporary
+        objectKey: `streamvault:${streamvaultId}`, // Store as reference
         originalName: fileName,
         mimeType,
         sizeBytes: BigInt(size),
-        status: "PENDING",
+        status: "READY", // StreamVault already processed it
         uploadedById: auth.session.userId,
+        streamvaultId: streamvaultId,
+        streamvaultIframe: streamvaultIframe,
+        streamvaultStatus: 3, // Ready
       },
     });
 
-    // 5. Generate safe object key
-    const ext = fileName.split(".").pop() || "mp4";
-    const folder = kind === "PREVIEW" ? "previews" : "lectures";
-    const objectKey = generateObjectKey(params.courseId, folder, media.id, ext);
-
-    // Update record with real key
-    await prisma.courseMedia.update({
-      where: { id: media.id },
-      data: { objectKey },
-    });
-
-    // 6. Generate Presigned URL (5 mins expiry)
-    const uploadUrl = await generatePresignedUploadUrl(objectKey, mimeType, 300);
-
     return NextResponse.json({
       mediaId: media.id,
-      uploadUrl,
-      objectKey,
+      streamvaultId: streamvaultId,
+      iframeLink: streamvaultIframe,
     });
   } catch (error) {
-    console.error("[MEDIA_UPLOAD_ERROR]", error);
-    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    console.error("[MEDIA_CREATE_ERROR]", error);
+    return NextResponse.json({ error: "Failed to create media record" }, { status: 500 });
   }
 }
 

@@ -13,6 +13,7 @@ import {
   Video,
   Youtube,
   UploadCloud,
+  FileText,
   Pencil,
   Trash2,
   Star,
@@ -20,16 +21,20 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface FreeVideoItem {
+interface FreeContentItem {
   id: string;
   title: string;
   slug: string;
   description?: string | null;
+  type: "VIDEO" | "PDF";
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   isFeatured: boolean;
   thumbnail?: string | null;
   resourceUrl?: string | null;
   videoUrl?: string | null;
+  streamvaultId?: string | null;
+  streamvaultIframe?: string | null;
+  streamvaultThumbnail?: string | null;
   categoryName?: string | null;
   source: "upload" | "youtube" | null;
   createdAt: string;
@@ -43,20 +48,20 @@ const STATUS_VARIANT: Record<string, any> = {
 
 export default function AdminFreeListPage() {
   const router = useRouter();
-  const [items, setItems] = useState<FreeVideoItem[]>([]);
+  const [items, setItems] = useState<FreeContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
-  const [deleteTarget, setDeleteTarget] = useState<FreeVideoItem | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [deleteTarget, setDeleteTarget] = useState<FreeContentItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const fetchItems = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/free-vena");
-      if (!res.ok) throw new Error("Failed to load videos");
+      if (!res.ok) throw new Error("Failed to load content");
       const data = await res.json();
       setItems(data.data || []);
     } catch (err: any) {
@@ -77,10 +82,10 @@ export default function AdminFreeListPage() {
         item.title.toLowerCase().includes(search.toLowerCase()) ||
         (item.description || "").toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === "ALL" || item.status === statusFilter;
-      const matchSource = sourceFilter === "ALL" || item.source === sourceFilter;
-      return matchSearch && matchStatus && matchSource;
+      const matchType = typeFilter === "ALL" || item.type === typeFilter;
+      return matchSearch && matchStatus && matchType;
     });
-  }, [items, search, statusFilter, sourceFilter]);
+  }, [items, search, statusFilter, typeFilter]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -103,9 +108,7 @@ export default function AdminFreeListPage() {
   };
 
   if (loading) {
-    return (
-      <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />
-    );
+    return <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />;
   }
 
   return (
@@ -114,11 +117,11 @@ export default function AdminFreeListPage() {
         <div>
           <h1 className="text-2xl font-bold text-charcoal">Free VENA</h1>
           <p className="text-charcoal-muted mt-1">
-            Manage free medical learning videos (uploads and YouTube embeds).
+            Manage free medical learning videos and PDF documents.
           </p>
         </div>
         <Button onClick={() => router.push("/dashboard/admin/free-vena/new")}>
-          <Plus className="mr-2 h-4 w-4" /> Add Free Video
+          <Plus className="mr-2 h-4 w-4" /> Add Content
         </Button>
       </div>
 
@@ -150,6 +153,15 @@ export default function AdminFreeListPage() {
           />
         </div>
         <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
+        >
+          <option value="ALL">All Types</option>
+          <option value="VIDEO">Videos</option>
+          <option value="PDF">PDF Documents</option>
+        </select>
+        <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
@@ -159,25 +171,11 @@ export default function AdminFreeListPage() {
           <option value="PUBLISHED">Published</option>
           <option value="ARCHIVED">Archived</option>
         </select>
-        <select
-          value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value)}
-          className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-charcoal outline-none focus:ring-2 focus:ring-vena-500"
-        >
-          <option value="ALL">All Sources</option>
-          <option value="upload">Direct Upload</option>
-          <option value="youtube">YouTube</option>
-        </select>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label="Total"
-          value={items.length}
-          icon={Video}
-          color="vena"
-        />
+        <StatCard label="Total" value={items.length} icon={Video} color="vena" />
         <StatCard
           label="Published"
           value={items.filter((i) => i.status === "PUBLISHED").length}
@@ -185,16 +183,16 @@ export default function AdminFreeListPage() {
           color="emerald"
         />
         <StatCard
-          label="Uploads"
-          value={items.filter((i) => i.source === "upload").length}
-          icon={UploadCloud}
+          label="Videos"
+          value={items.filter((i) => i.type === "VIDEO").length}
+          icon={Video}
           color="blue"
         />
         <StatCard
-          label="YouTube"
-          value={items.filter((i) => i.source === "youtube").length}
-          icon={Youtube}
-          color="red"
+          label="PDFs"
+          value={items.filter((i) => i.type === "PDF").length}
+          icon={FileText}
+          color="amber"
         />
       </div>
 
@@ -202,15 +200,15 @@ export default function AdminFreeListPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={Video}
-          title="No free videos"
+          title="No free content"
           description={
-            search || statusFilter !== "ALL" || sourceFilter !== "ALL"
+            search || statusFilter !== "ALL" || typeFilter !== "ALL"
               ? "Try adjusting your filters."
-              : "Add your first free video to get started."
+              : "Add your first video or PDF document to get started."
           }
           actionLabel={
-            !search && statusFilter === "ALL" && sourceFilter === "ALL"
-              ? "Add Free Video"
+            !search && statusFilter === "ALL" && typeFilter === "ALL"
+              ? "Add Content"
               : undefined
           }
           onAction={() => router.push("/dashboard/admin/free-vena/new")}
@@ -223,13 +221,28 @@ export default function AdminFreeListPage() {
               <div
                 className={cn(
                   "h-36 relative flex items-center justify-center",
-                  item.thumbnail || "bg-vena-500"
+                  item.thumbnail || (item.type === "PDF" ? "bg-amber-500" : "bg-vena-500")
                 )}
+                style={
+                  item.streamvaultThumbnail || item.thumbnail
+                    ? {
+                        backgroundImage: `url(${item.streamvaultThumbnail || item.thumbnail})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                      }
+                    : undefined
+                }
               >
-                {item.source === "youtube" ? (
-                  <Youtube className="text-white/90" size={32} />
-                ) : (
-                  <UploadCloud className="text-white/90" size={32} />
+                {!item.thumbnail && !item.streamvaultThumbnail && (
+                  <>
+                    {item.type === "PDF" ? (
+                      <FileText className="text-white/90" size={32} />
+                    ) : item.source === "youtube" ? (
+                      <Youtube className="text-white/90" size={32} />
+                    ) : (
+                      <UploadCloud className="text-white/90" size={32} />
+                    )}
+                  </>
                 )}
                 {item.isFeatured && (
                   <div className="absolute top-2 left-2">
@@ -238,7 +251,8 @@ export default function AdminFreeListPage() {
                     </Badge>
                   </div>
                 )}
-                <div className="absolute top-2 right-2">
+                <div className="absolute top-2 right-2 flex gap-1">
+                  <Badge variant="info">{item.type}</Badge>
                   <Badge variant={STATUS_VARIANT[item.status] || "default"}>
                     {item.status}
                   </Badge>
@@ -248,17 +262,23 @@ export default function AdminFreeListPage() {
               {/* Body */}
               <div className="p-4 flex-1 flex flex-col">
                 <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="info">
-                    {item.source === "youtube" ? (
-                      <>
-                        <Youtube size={10} className="mr-1" /> YouTube
-                      </>
-                    ) : (
-                      <>
-                        <UploadCloud size={10} className="mr-1" /> Upload
-                      </>
-                    )}
-                  </Badge>
+                  {item.type === "VIDEO" ? (
+                    <>
+                      {item.source === "youtube" ? (
+                        <Badge variant="info">
+                          <Youtube size={10} className="mr-1" /> YouTube
+                        </Badge>
+                      ) : (
+                        <Badge variant="info">
+                          <UploadCloud size={10} className="mr-1" /> Upload
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <Badge variant="info">
+                      <FileText size={10} className="mr-1" /> PDF Document
+                    </Badge>
+                  )}
                   {item.categoryName && (
                     <span className="text-xs text-charcoal-muted">
                       {item.categoryName}
@@ -313,7 +333,7 @@ export default function AdminFreeListPage() {
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Free Video"
+        title="Delete Free Content"
       >
         <div className="space-y-4">
           <p className="text-sm text-charcoal-muted">
@@ -323,7 +343,12 @@ export default function AdminFreeListPage() {
             </span>
             ?
           </p>
-          {deleteTarget?.source === "upload" && (
+          {deleteTarget?.type === "PDF" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+              This will also delete the PDF file from Cloudflare R2 storage.
+            </div>
+          )}
+          {deleteTarget?.type === "VIDEO" && deleteTarget.source === "upload" && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
               This will also delete the uploaded video file from storage.
             </div>
@@ -362,12 +387,13 @@ function StatCard({
   label: string;
   value: number;
   icon: typeof Video;
-  color: "vena" | "emerald" | "blue" | "red";
+  color: "vena" | "emerald" | "blue" | "amber" | "red";
 }) {
   const colorClasses = {
     vena: "text-vena-600 bg-vena-50",
     emerald: "text-emerald-600 bg-emerald-50",
     blue: "text-blue-600 bg-blue-50",
+    amber: "text-amber-600 bg-amber-50",
     red: "text-red-600 bg-red-50",
   };
   return (

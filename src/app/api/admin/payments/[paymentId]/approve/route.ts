@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-utils";
-import { calculateCommission } from "@/lib/finance";
 import { createNotification } from "@/lib/notifications";
+import { buildPaymentSnapshot, reverseDoctorBaseFromStudentPrice, computePlatformCommission, computeDoctorNet } from "@/lib/pricing";
 
 export async function POST(
   req: Request,
@@ -12,15 +12,19 @@ export async function POST(
   if (!auth.ok) return auth.response;
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const { doctorEarnings, platformEarnings } = body;
-
     const result = await prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({
         where: { id: params.paymentId },
         include: {
-          // أضف slug:true هنا
-          course: { select: { id: true, title: true, doctorId: true, slug: true } },
+          course: { 
+            select: { 
+              id: true, 
+              title: true, 
+              doctorId: true, 
+              slug: true,
+              doctorBasePrice: true,
+            } 
+          },
           enrollment: true,
         },
       });
@@ -30,33 +34,45 @@ export async function POST(
       if (["REJECTED", "CANCELLED"].includes(payment.status)) throw new Error("CANNOT_APPROVE");
       if (!payment.proofUrl) throw new Error("NO_RECEIPT");
 
-      // Calculate or use admin-provided split
-      let commission: number;
-      let doctorNet: number;
+      let snapshot = payment.paymentConfigSnapshot as any;
       const grossAmount = payment.amount.toNumber();
 
-      if (doctorEarnings !== undefined && platformEarnings !== undefined) {
-        // Admin override
-        doctorNet = parseFloat(doctorEarnings);
-        commission = parseFloat(platformEarnings);
+      // FIX: لو الـ snapshot مش فيه بيانات التسعير (doctorNet)، نحسبها ونضيفها
+      if (!snapshot || !snapshot.doctorNet) {
+        const courseDoctorBase = payment.course.doctorBasePrice?.toNumber();
+        let pricingData;
 
-        // Validate: split must equal gross amount
-        if (Math.abs(doctorNet + commission - grossAmount) > 0.01) {
-          throw new Error("INVALID_SPLIT");
+        if (courseDoctorBase && courseDoctorBase > 0) {
+          pricingData = buildPaymentSnapshot({
+            courseId: payment.course.id,
+            courseTitle: payment.course.title,
+            doctorBase: courseDoctorBase,
+            currency: payment.currency,
+          });
+        } else {
+          // Fallback لو مفيش doctorBasePrice محفوظ
+          const reverseDoctorBase = reverseDoctorBaseFromStudentPrice(grossAmount);
+          pricingData = {
+            doctorBase: reverseDoctorBase,
+            platformCommissionRate: 0.15,
+            platformCommission: computePlatformCommission(reverseDoctorBase),
+            studentPrice: grossAmount,
+            doctorNet: computeDoctorNet(reverseDoctorBase),
+          };
         }
 
-        // Prevent negative amounts
-        if (doctorNet < 0 || commission < 0) {
-          throw new Error("NEGATIVE_AMOUNT");
-        }
-      } else {
-        // Default calculation
-        const calculated = await calculateCommission(grossAmount);
-        commission = calculated.commission;
-        doctorNet = calculated.doctorNet;
+        // دمج بيانات التسعير مع الـ snapshot القديم (اللي فيه بيانات البنك مثلاً)
+        snapshot = { ...snapshot, ...pricingData };
+
+        await tx.payment.update({
+          where: { id: params.paymentId },
+          data: { paymentConfigSnapshot: snapshot },
+        });
       }
 
-      // Update payment status
+      const doctorNet = snapshot.doctorNet;
+      const commission = snapshot.platformCommission;
+
       await tx.payment.update({
         where: { id: params.paymentId },
         data: {
@@ -70,19 +86,11 @@ export async function POST(
       if (payment.enrollment) {
         await tx.enrollment.update({
           where: { id: payment.enrollmentId! },
-          data: {
-            status: "ACTIVE",
-            activatedAt: new Date(),
-          },
+          data: { status: "ACTIVE", activatedAt: new Date() },
         });
       } else {
         const existingEnr = await tx.enrollment.findUnique({
-          where: {
-            studentId_courseId: {
-              studentId: payment.studentId,
-              courseId: payment.courseId,
-            },
-          },
+          where: { studentId_courseId: { studentId: payment.studentId, courseId: payment.courseId } },
         });
 
         if (existingEnr) {
@@ -123,9 +131,9 @@ export async function POST(
             courseId: payment.courseId,
             doctorId: payment.course.doctorId,
             studentId: payment.studentId,
-            grossAmount: grossAmount,
-            platformCommission: commission,
-            doctorNet: doctorNet,
+            grossAmount: snapshot.studentPrice,
+            platformCommission: snapshot.platformCommission,
+            doctorNet: snapshot.doctorNet,
             currency: payment.currency,
             type: "COURSE_SALE",
             status: "POSTED",
@@ -143,7 +151,7 @@ export async function POST(
         },
       });
 
-      return { payment, doctorNet, commission };
+      return { payment, snapshot };
     });
 
     // Notifications
@@ -152,10 +160,9 @@ export async function POST(
       "PAYMENT_APPROVED",
       "Payment Approved",
       `Your payment for ${result.payment.course.title} has been approved. You can now access the course.`,
-      `/learn/${result.payment.course.slug || result.payment.course.id}` // استخدام slug أو id
+      `/learn/${result.payment.course.slug || result.payment.course.id}`
     );
 
-    // Notify doctor
     await createNotification(
       result.payment.course.doctorId,
       "SYSTEM",
@@ -166,24 +173,17 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      doctorNet: result.doctorNet,
-      platformCommission: result.commission,
+      doctorNet: result.snapshot.doctorNet,
+      platformCommission: result.snapshot.platformCommission,
+      grossAmount: result.snapshot.studentPrice,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
 
-    if (msg === "PAYMENT_NOT_FOUND")
-      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
-    if (msg === "ALREADY_APPROVED")
-      return NextResponse.json({ error: "Payment already approved" }, { status: 409 });
-    if (msg === "CANNOT_APPROVE")
-      return NextResponse.json({ error: "Cannot approve a rejected or cancelled payment" }, { status: 400 });
-    if (msg === "NO_RECEIPT")
-      return NextResponse.json({ error: "No receipt uploaded. Cannot approve without proof." }, { status: 400 });
-    if (msg === "INVALID_SPLIT")
-      return NextResponse.json({ error: "Doctor earnings + platform earnings must equal the payment amount" }, { status: 400 });
-    if (msg === "NEGATIVE_AMOUNT")
-      return NextResponse.json({ error: "Amounts cannot be negative" }, { status: 400 });
+    if (msg === "PAYMENT_NOT_FOUND") return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    if (msg === "ALREADY_APPROVED") return NextResponse.json({ error: "Payment already approved" }, { status: 409 });
+    if (msg === "CANNOT_APPROVE") return NextResponse.json({ error: "Cannot approve a rejected or cancelled payment" }, { status: 400 });
+    if (msg === "NO_RECEIPT") return NextResponse.json({ error: "No receipt uploaded. Cannot approve without proof." }, { status: 400 });
 
     return NextResponse.json({ error: "Failed to approve payment" }, { status: 500 });
   }

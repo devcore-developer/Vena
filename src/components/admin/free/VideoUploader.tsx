@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
 interface VideoUploaderProps {
-  /** Current uploaded video URL (for edit mode). */
+  /** Current StreamVault iframe URL (for edit mode). */
   value?: string | null;
-  /** Called when upload completes (or when existing URL is removed). */
+  /** Called when upload completes with the iframe URL (or null when removed). */
   onChange: (url: string | null) => void;
   /** Show read-only display in edit mode if true. */
   readOnly?: boolean;
@@ -24,9 +24,8 @@ interface VideoUploaderProps {
 
 type UploadState =
   | { status: "idle" }
-  | { status: "selecting" }
-  | { status: "uploading"; progress: number; filename: string }
-  | { status: "success"; url: string; filename: string; size: number }
+  | { status: "uploading"; progress: number; filename: string; phase: string }
+  | { status: "success"; url: string; filename: string; size: number; videoId?: string }
   | { status: "error"; message: string };
 
 const MAX_SIZE_MB = 500;
@@ -43,7 +42,7 @@ export function VideoUploader({
       ? {
           status: "success",
           url: value,
-          filename: extractFilenameFromUrl(value),
+          filename: "Existing video",
           size: 0,
         }
       : { status: "idle" }
@@ -59,10 +58,7 @@ export function VideoUploader({
     async (file: File) => {
       // Client-side validation
       if (file.size === 0) {
-        setState({
-          status: "error",
-          message: "File is empty",
-        });
+        setState({ status: "error", message: "File is empty" });
         return;
       }
 
@@ -98,6 +94,7 @@ export function VideoUploader({
         status: "uploading",
         progress: 0,
         filename: file.name,
+        phase: "Uploading to R2...",
       });
 
       const formData = new FormData();
@@ -108,10 +105,15 @@ export function VideoUploader({
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
+          // Cap at 90% — the remaining 10% is StreamVault processing
+          const percent = Math.round((e.loaded / e.total) * 90);
           setState((prev) =>
             prev.status === "uploading"
-              ? { ...prev, progress: percent }
+              ? {
+                  ...prev,
+                  progress: percent,
+                  phase: percent < 90 ? "Uploading to R2..." : "StreamVault processing...",
+                }
               : prev
           );
         }
@@ -122,17 +124,28 @@ export function VideoUploader({
         try {
           const res = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300) {
+            // StreamVault returns: { videoId, iframeLink, thumbnailUrl, status, ready }
+            const iframeUrl = res.iframeLink || `https://streamvault.one/embed/${res.videoId}`;
+
             setState({
               status: "success",
-              url: res.url,
+              url: iframeUrl,
               filename: res.originalName || file.name,
               size: res.size || file.size,
+              videoId: res.videoId,
             });
-            onChange(res.url);
+            onChange(iframeUrl);
           } else {
+            let errorMsg = res.error || `Upload failed (HTTP ${xhr.status})`;
+
+            // Special handling for StreamVault quota errors
+            if (res.code === "QUOTA_EXCEEDED" || res.streamvaultError) {
+              errorMsg = `StreamVault: ${res.streamvaultError || res.error}. Contact StreamVault support to link your Starter plan to your API key.`;
+            }
+
             setState({
               status: "error",
-              message: res.error || `Upload failed (HTTP ${xhr.status})`,
+              message: errorMsg,
             });
           }
         } catch {
@@ -156,7 +169,8 @@ export function VideoUploader({
         setState({ status: "idle" });
       };
 
-      xhr.open("POST", "/api/admin/free-vena/upload");
+      // FIX: Use the StreamVault upload route (URL pull approach)
+      xhr.open("POST", "/api/admin/streamvault/upload");
       xhr.send(formData);
     },
     [onChange]
@@ -180,9 +194,6 @@ export function VideoUploader({
     []
   );
 
-  // --------------------------------------------------------
-  // Cancel & clear
-  // --------------------------------------------------------
   const handleCancel = () => {
     if (xhrRef.current) {
       xhrRef.current.abort();
@@ -195,9 +206,6 @@ export function VideoUploader({
     onChange(null);
   };
 
-  // --------------------------------------------------------
-  // Render
-  // --------------------------------------------------------
   if (readOnly && state.status === "success") {
     return (
       <div className={cn("w-full", className)}>
@@ -207,7 +215,7 @@ export function VideoUploader({
             <p className="text-sm font-medium text-charcoal truncate">
               {state.filename}
             </p>
-            <p className="text-xs text-charcoal-muted">Uploaded video</p>
+            <p className="text-xs text-charcoal-muted">StreamVault video</p>
           </div>
           <a
             href={state.url}
@@ -232,12 +240,12 @@ export function VideoUploader({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) handleFile(file);
-          e.target.value = ""; // allow re-selecting the same file
+          e.target.value = "";
         }}
       />
 
       {/* Idle / Drop zone */}
-      {(state.status === "idle" || state.status === "selecting") && (
+      {state.status === "idle" && (
         <div
           onClick={() => inputRef.current?.click()}
           onDrop={handleDrop}
@@ -250,6 +258,9 @@ export function VideoUploader({
           </p>
           <p className="text-xs text-charcoal-muted">
             MP4, WebM, OGG, MOV, or MKV — max {MAX_SIZE_MB} MB
+          </p>
+          <p className="text-xs text-vena-600 mt-1">
+            Videos are processed by StreamVault
           </p>
         </div>
       )}
@@ -264,16 +275,18 @@ export function VideoUploader({
                 {state.filename}
               </p>
               <p className="text-xs text-charcoal-muted">
-                Uploading... {state.progress}%
+                {state.phase} {state.progress}%
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="text-xs text-charcoal-muted hover:text-red-500"
-            >
-              Cancel
-            </button>
+            {state.progress < 90 && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="text-xs text-charcoal-muted hover:text-red-500"
+              >
+                Cancel
+              </button>
+            )}
           </div>
           <div className="h-2 bg-white rounded-full overflow-hidden">
             <div
@@ -281,6 +294,11 @@ export function VideoUploader({
               style={{ width: `${state.progress}%` }}
             />
           </div>
+          {state.progress >= 90 && (
+            <p className="text-xs text-vena-600 mt-2 text-center animate-pulse">
+              StreamVault is processing your video... this may take a minute
+            </p>
+          )}
         </div>
       )}
 
@@ -297,7 +315,10 @@ export function VideoUploader({
                 {state.size > 0
                   ? `${(state.size / (1024 * 1024)).toFixed(1)} MB · `
                   : ""}
-                Upload complete
+                ✅ Upload complete
+                {state.videoId && (
+                  <span className="text-vena-600 ml-1">— StreamVault ID: {state.videoId.substring(0, 12)}...</span>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -320,12 +341,14 @@ export function VideoUploader({
             </div>
           </div>
 
-          {/* Live preview */}
-          <video
+          {/* Live preview using StreamVault iframe */}
+          <iframe
             src={state.url}
-            controls
+            title="Video preview"
             className="mt-3 w-full rounded-lg bg-black"
-            style={{ maxHeight: 240 }}
+            style={{ border: "none", aspectRatio: "16 / 9", maxHeight: 240 }}
+            allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
           />
         </div>
       )}
@@ -354,17 +377,4 @@ export function VideoUploader({
       )}
     </div>
   );
-}
-
-// --------------------------------------------------------
-// Helpers
-// --------------------------------------------------------
-function extractFilenameFromUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    const parts = u.pathname.split("/").filter(Boolean);
-    return parts[parts.length - 1] || "video.mp4";
-  } catch {
-    return "video.mp4";
-  }
 }

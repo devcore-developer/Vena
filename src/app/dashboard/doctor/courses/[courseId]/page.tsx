@@ -4,6 +4,8 @@ import { redirect, notFound } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge, getStatusVariant } from "@/components/ui/Badge";
+import { PriceBreakdown } from "@/components/video/PriceBreakdown";
+import { reverseDoctorBaseFromStudentPrice } from "@/lib/pricing";
 import { Plus, ArrowLeft, BookOpen, FileText, Save, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { CourseStatus } from "@/types";
@@ -65,6 +67,14 @@ export default async function CourseManagementPage({
 
   const isPublished = course.status === "PUBLISHED";
 
+  // FIX: احسب الـ doctor base price
+  // لو الـ course عنده doctorBasePrice في الـ DB، استخدمه
+  // وإلا back out من الـ student price باستخدام reverse formula
+  const studentPrice = course.price.toNumber();
+  const doctorBase =
+    course.doctorBasePrice?.toNumber() ??
+    reverseDoctorBaseFromStudentPrice(studentPrice);
+
   return (
     <div>
       <Link
@@ -94,16 +104,26 @@ export default async function CourseManagementPage({
 
       {/* Course Info Card */}
       <Card className="mb-6">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-charcoal-muted uppercase font-semibold">Price</p>
-            <p className="text-lg font-semibold text-charcoal mt-1">
-              {course.price.toNumber() === 0 ? "Free" : `${course.price.toNumber()} EGP`}
-            </p>
-          </div>
+        {/* FIX: عرض الـ price breakdown بشكل كامل */}
+        <div className="mb-4">
+          <p className="text-xs text-charcoal-muted uppercase font-semibold mb-2">Pricing</p>
+          {studentPrice === 0 ? (
+            <p className="text-lg font-semibold text-charcoal">Free Course</p>
+          ) : (
+            <PriceBreakdown doctorBase={doctorBase} />
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-vena-50">
           <div>
             <p className="text-xs text-charcoal-muted uppercase font-semibold">Language</p>
             <p className="text-sm font-semibold text-charcoal mt-1">{course.language}</p>
+          </div>
+          <div>
+            <p className="text-xs text-charcoal-muted uppercase font-semibold">Estimated Duration</p>
+            <p className="text-sm font-semibold text-charcoal mt-1">
+              {course.estimatedDuration ? `${course.estimatedDuration}h` : "Self-paced"}
+            </p>
           </div>
         </div>
         {course.description && (
@@ -237,7 +257,7 @@ function PublishButton({
         const session = await getValidSession();
         if (!session || session.role !== "DOCTOR") {
           redirect("/login");
-          return; // Added return to satisfy TypeScript
+          return;
         }
 
         const course = await prisma.course.findUnique({
@@ -247,7 +267,7 @@ function PublishButton({
 
         if (!course || course.doctorId !== session.userId) {
           redirect("/dashboard/doctor/courses");
-          return; // Added return to satisfy TypeScript
+          return;
         }
 
         await prisma.course.update({

@@ -17,6 +17,10 @@ interface Lesson {
   isPreview: boolean;
   isCompleted: boolean;
   mediaId?: string;
+  // FIX: StreamVault fields
+  streamvaultId?: string | null;
+  streamvaultIframe?: string | null;
+  streamvaultThumbnail?: string | null;
 }
 
 interface Section {
@@ -97,7 +101,15 @@ export default function LearnClientView({ course, studentName }: { course: Cours
 
               {activeLesson.type === "VIDEO" && activeLesson.mediaId ? (
                 <div className="mb-4">
-                  <VideoPlayer mediaId={activeLesson.mediaId} studentName={studentName} />
+                  {/* FIX: بيمرّر streamvault fields للـ VideoPlayer */}
+                  <VideoPlayer
+                    mediaId={activeLesson.mediaId}
+                    studentName={studentName}
+                    streamvaultId={activeLesson.streamvaultId}
+                    streamvaultIframe={activeLesson.streamvaultIframe}
+                    poster={activeLesson.streamvaultThumbnail}
+                    title={activeLesson.title}
+                  />
                 </div>
               ) : activeLesson.type === "VIDEO" && activeLesson.resourceUrl ? (
                 <div className="aspect-video bg-charcoal rounded-lg overflow-hidden mb-4">

@@ -47,8 +47,18 @@ export default async function SavedResourcesPage() {
                   <h3 className="text-sm font-semibold text-charcoal mt-2">{r.title}</h3>
                   {r.description && <p className="text-xs text-charcoal-muted mt-1 line-clamp-2">{r.description}</p>}
                   <div className="mt-3 pt-3 border-t border-vena-50">
-                    {r.resourceUrl && <Button href={r.resourceUrl} variant="secondary" size="sm" className="w-full"><ExternalLink className="mr-1 h-3.5 w-3.5" /> Open</Button>}
-                    {r.videoUrl && <Button href={r.videoUrl} variant="secondary" size="sm" className="w-full"><Video className="mr-1 h-3.5 w-3.5" /> Watch</Button>}
+                    {/* FIX: لو الفيديو على StreamVault، افتح صفحة العرض */}
+                    {r.type === "VIDEO" && (
+                      <Button href={`/free/${r.slug}`} variant="secondary" size="sm" className="w-full">
+                        <Video className="mr-1 h-3.5 w-3.5" /> Watch
+                      </Button>
+                    )}
+                    {/* FIX: لو ملف PDF/File، افتح الرابط مباشرة */}
+                    {r.type !== "VIDEO" && r.resourceUrl && (
+                      <Button href={r.resourceUrl} variant="secondary" size="sm" className="w-full">
+                        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Open
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

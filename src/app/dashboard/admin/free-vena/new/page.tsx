@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { FreeVideoForm } from "@/components/admin/free/FreeVideoForm";
+import { FreeContentForm } from "@/components/admin/free/FreeContentForm";
 
-export const metadata = { title: "Add Free Video" };
+export const metadata = { title: "Add Free Content" };
 
-export default async function NewFreeVideoPage() {
-  // Fetch categories on the server
+export default async function NewFreeContentPage() {
   let categories: { id: string; name: string }[] = [];
 
   try {
@@ -19,13 +18,13 @@ export default async function NewFreeVideoPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-charcoal">Add Free Video</h1>
+        <h1 className="text-2xl font-bold text-charcoal">Add Free Content</h1>
         <p className="text-charcoal-muted mt-1">
-          Upload a video file or embed a YouTube link.
+          Add a video (upload or YouTube) or a PDF document to Free VENA.
         </p>
       </div>
 
-      <FreeVideoForm mode="create" categories={categories} />
+      <FreeContentForm mode="create" categories={categories} />
     </div>
   );
 }

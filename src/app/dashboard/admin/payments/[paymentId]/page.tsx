@@ -8,6 +8,7 @@ import { Badge, getStatusVariant } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ArrowLeft, Check, X, FileText, AlertCircle, ShieldCheck, Ban } from "lucide-react";
+import { reverseDoctorBaseFromStudentPrice, computePlatformCommission, computeDoctorNet } from "@/lib/pricing";
 
 interface PaymentDetail {
   id: string;
@@ -33,10 +34,9 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   
-  // Revenue split state
-  const [doctorEarnings, setDoctorEarnings] = useState<number>(0);
-  const [platformEarnings, setPlatformEarnings] = useState<number>(0);
-  const [splitError, setSplitError] = useState("");
+  // FIX: calculated read-only values
+  const [doctorNet, setDoctorNet] = useState<number>(0);
+  const [platformCommission, setPlatformCommission] = useState<number>(0);
   
   const [rejectReason, setRejectReason] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -49,40 +49,29 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
         const found = (d.data || []).find((p: PaymentDetail) => p.id === params.paymentId);
         setPayment(found || null);
         if (found) {
-          // Calculate default 90/10 split
-          const doctor = Math.round(found.amount * 0.9);
-          const platform = found.amount - doctor;
-          setDoctorEarnings(doctor);
-          setPlatformEarnings(platform);
+          // FIX: Calculate based on 15% added to doctor base price
+          const studentTotal = found.amount;
+          const basePrice = reverseDoctorBaseFromStudentPrice(studentTotal);
+          const commission = computePlatformCommission(basePrice);
+          const net = computeDoctorNet(basePrice);
+          
+          setDoctorNet(net);
+          setPlatformCommission(commission);
         }
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [params.paymentId]);
 
-  const validateSplit = () => {
-    setSplitError("");
-    if (doctorEarnings < 0 || platformEarnings < 0) {
-      setSplitError("Amounts cannot be negative");
-      return false;
-    }
-    if (Math.abs(doctorEarnings + platformEarnings - (payment?.amount || 0)) > 0.01) {
-      setSplitError(`Doctor (${doctorEarnings}) + Platform (${platformEarnings}) must equal ${payment?.amount}`);
-      return false;
-    }
-    return true;
-  };
-
   const handleApprove = async () => {
-    if (!validateSplit()) return;
-    
     setProcessing(true);
     setError("");
     try {
       const res = await fetch(`/api/admin/payments/${payment!.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doctorEarnings, platformEarnings }),
+        // FIX: Don't send amounts, backend calculates them
+        body: JSON.stringify({}), 
       });
 
       if (!res.ok) {
@@ -244,77 +233,40 @@ export default function PaymentDetailPage({ params }: { params: { paymentId: str
         </div>
       </div>
 
-      {/* Approve Modal with Revenue Split */}
+      {/* Approve Modal - Read Only Financials */}
       <Modal isOpen={showApproveModal} onClose={() => setShowApproveModal(false)} title="Confirm Approval">
         <div className="space-y-4">
           <p className="text-sm text-charcoal-muted">
-            Review the revenue split below. You can adjust the amounts before approving.
+            Confirm payment approval. Financial distribution is calculated automatically based on the 15% platform commission rule.
           </p>
-          <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-charcoal-muted">Student:</span>
-              <span className="font-medium text-charcoal">{payment.studentName}</span>
+          <div className="bg-slate-50 rounded-lg p-4 space-y-3 text-sm">
+            <div className="flex justify-between font-medium pb-2 border-b border-slate-200">
+              <span className="text-charcoal-muted">Student Paid (Total)</span>
+              <span className="text-charcoal">{payment.amount.toFixed(2)} {payment.currency}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-charcoal-muted">Course:</span>
-              <span className="font-medium text-charcoal">{payment.courseTitle}</span>
+            
+            {/* FIX: Read-only display for Doctor Net */}
+            <div className="flex justify-between items-center">
+              <span className="text-charcoal-muted">Instructor Receives (85% of base)</span>
+              <span className="font-bold text-emerald-600">{doctorNet.toFixed(2)} {payment.currency}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-charcoal-muted">Total Amount:</span>
-              <span className="font-bold text-charcoal">{payment.amount} {payment.currency}</span>
+            
+            {/* FIX: Read-only display for Platform Commission */}
+            <div className="flex justify-between items-center">
+              <span className="text-charcoal-muted">Platform Commission (15% of base)</span>
+              <span className="font-bold text-vena-600">{platformCommission.toFixed(2)} {payment.currency}</span>
             </div>
           </div>
 
-          {/* Editable Revenue Split */}
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">
-                Doctor Earnings (EGP)
-              </label>
-              <input
-                type="number"
-                value={doctorEarnings}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  setDoctorEarnings(val);
-                  setPlatformEarnings(payment.amount - val);
-                  setSplitError("");
-                }}
-                className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500"
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-charcoal mb-1">
-                Platform Earnings (EGP)
-              </label>
-              <input
-                type="number"
-                value={platformEarnings}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  setPlatformEarnings(val);
-                  setDoctorEarnings(payment.amount - val);
-                  setSplitError("");
-                }}
-                className="w-full px-3 py-2 border border-vena-100 rounded-lg text-sm outline-none focus:ring-2 focus:ring-vena-500"
-                min="0"
-                step="0.01"
-              />
-            </div>
-            {splitError && (
-              <div className="text-xs text-red-600">{splitError}</div>
-            )}
-            <div className="text-xs text-charcoal-muted text-center">
-              Doctor + Platform = {doctorEarnings + platformEarnings} EGP (must equal {payment.amount} EGP)
-            </div>
+          <div className="text-xs text-charcoal-muted bg-blue-50 p-3 rounded-lg border border-blue-100">
+            Note: Amounts are derived from the instructor&apos;s original base price and cannot be edited.
           </div>
 
           {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
+          
           <div className="flex gap-3 pt-2">
             <Button variant="secondary" className="flex-1" onClick={() => setShowApproveModal(false)}>Cancel</Button>
-            <Button className="flex-1" isLoading={processing} onClick={handleApprove} disabled={!!splitError}>
+            <Button className="flex-1" isLoading={processing} onClick={handleApprove}>
               <Check size={16} className="mr-2" /> Confirm Approval
             </Button>
           </div>

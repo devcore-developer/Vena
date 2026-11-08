@@ -1,31 +1,47 @@
 "use client";
 
-import React from "react";
+import { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
-  children: React.ReactNode;
+  title?: string;
+  children: ReactNode;
+  className?: string;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onClose}>
-      <div 
-        className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative animate-slide-in" 
-        onClick={e => e.stopPropagation()}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        className={cn(
+          "bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]",
+          className
+        )}
+        onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-charcoal-muted hover:text-charcoal">
-          <X size={20} />
-        </button>
-        <h2 className="text-xl font-bold text-charcoal mb-4">{title}</h2>
-        {children}
+        {title && (
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 shrink-0">
+            <h2 className="text-lg font-semibold text-charcoal">{title}</h2>
+            <button
+              onClick={onClose}
+              className="text-charcoal-muted hover:text-charcoal p-1 rounded-full hover:bg-slate-100"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        )}
+        <div className="p-6 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
-};
+}
